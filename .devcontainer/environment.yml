@@ -1,0 +1,15 @@
+name: base
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pandas
+  - requests
+  - numpy
+  - ipython
+  - pytest
+  - anaconda::ipykernel
+  - pip
+  - pip:
+    - boto3
+
