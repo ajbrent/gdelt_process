@@ -1,6 +1,6 @@
 import requests
 import random
-import os
+import io
 import re
 import time
 import zipfile
@@ -9,6 +9,7 @@ import logging
 import boto3
 
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 TXT_LINK = 'http://data.gdeltproject.org/gdeltv2/lastupdate.txt'
 
@@ -127,9 +128,12 @@ def get_zip_links(t: int = 1, prev_dt: str = None) -> dict[str, str]:
             raise ValueError("Invalid link")
 
     curr_dt = check_links(link_dict)
+
     if curr_dt is None:
         raise ValueError("Invalid links")
     if prev_dt is not None:
+        logger.info(f'Current datetime: {curr_dt}')
+        logger.info(f'Previous datetime: {prev_dt}')
         if curr_dt == prev_dt:
             logger.warning(f'No new data available. Retrying in {t} seconds.')
             offset = float(random.randint(0, 1000)) / 1000
@@ -164,7 +168,7 @@ def rm_subtopics(topics: list[str]) -> list[str]:
     filtered_topics = [topics[i] for i in range(len(topics)) if i not in indexes]
     return filtered_topics
 
-def gkg_process(df: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
+def gkg_process(df: pd.DataFrame) -> dict[str, list[str]]:
     """Process the GKG file."""
     # Looking only at web documents: code 1
     df = df[df['V2SOURCECOLLECTIONIDENTIFIER'] == 1]
@@ -185,15 +189,12 @@ def gkg_process(df: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
         url = row['V2DOCUMENTIDENTIFIER']
         for topic in row['TOPICS']:
             if topic in topic_dict:
-                if src in topic_dict[topic]:
-                    topic_dict[topic][src].append(url)
-                else:
-                    topic_dict[topic][src] = [url]
+                topic_dict[topic].append(url)
             else:
-                topic_dict[topic] = {src: [url]}
+                topic_dict[topic] = [url]
     return topic_dict
 
-def create_dict(link: str) -> pd.DataFrame:
+def create_dict(link: str) -> dict[str, list[str]]:
     """Download, create dataframe and return data for DynamoDB model."""
     zip_response = None
     try:
@@ -202,7 +203,7 @@ def create_dict(link: str) -> pd.DataFrame:
     except requests.exceptions.RequestException as e:
         print(e)
         return None
-    with zipfile.ZipFile(zip_response.content) as z:
+    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
         csv_file_name = z.namelist()[0]
         with z.open(csv_file_name) as f:
             out_dict = {}
@@ -211,38 +212,7 @@ def create_dict(link: str) -> pd.DataFrame:
                 out_dict = gkg_process(gkg_df)
             return out_dict
 
-def to_dynamodb(dt: int, topic_dict: dict[str, dict[str, list[str]]]) -> bool:
-    """Upload data to DynamoDB. Exponential backoff for partial failure."""
-    # best place to get datetime?
-    client = boto3.client('dynamodb')
-    logger.info('Attached to DynamoDB')
-    put_items = []
-    for topic, sources in topic_dict.items():
-        for src, urls in sources.items():
-            item = {
-                'datetime': {
-                    'N': dt
-                },
-                'topic': {
-                    'S': topic
-                },
-                'source': {
-                    'S': src
-                },
-                'urls': {
-                    'SS': urls
-                },
-                'num_mentions': {
-                    'N': len(urls)
-                }
-            }
-            put_item = {
-                'PutRequest': {
-                    'Item': item
-                }
-            }
-            put_items.append(put_item)
-
+def batch_write(client, put_items) -> bool:
     response = None
     try:
         response = client.batch_write_item(
@@ -251,7 +221,7 @@ def to_dynamodb(dt: int, topic_dict: dict[str, dict[str, list[str]]]) -> bool:
             }
         )
     except client.exceptions.ProvisionedThroughputExceededException as e:
-        print(e)
+        logger.error('Provisioned throughput exceeded')
         return False
 
     if response is None:
@@ -259,11 +229,54 @@ def to_dynamodb(dt: int, topic_dict: dict[str, dict[str, list[str]]]) -> bool:
         return False
     # retrying unprocessed items with exponential backoff (max 64 seconds)
     t = 1
-    logger.warning(f'Unprocessed items: {len(response["UnprocessedItems"])}')
+    logger.info(f'Unprocessed items: {len(response["UnprocessedItems"])}')
     while response['UnprocessedItems'] != {} and t <= 64:
         offset = float(random.randint(0, 1000)) / 1000
         time.sleep(t + offset)
         response = client.batch_write_item(response['UnprocessedItems']) 
         t = t * 2
-    return response['UnprocessedItems'] == {}
+    put_items = []
+    if response['UnprocessedItems'] != {}:
+        logger.error('Failed to upload all items')
+        return False
+    return True
+
+def to_dynamodb(dt: str, topic_dict: dict[str, list[str]]) -> bool:
+    """Upload data to DynamoDB. Exponential backoff for partial failure."""
+    # best place to get datetime?
+    client = boto3.client('dynamodb')
+    logger.info('Attached to DynamoDB')
+    put_items = []
+    for topic, urls in topic_dict.items():
+        item = {
+            'datetime': {
+                'N': dt
+            },
+            'topic': {
+                'S': topic
+            },
+            'urls': {
+                'SS': urls
+            },
+            'num_mentions': {
+                'N': str(len(urls))
+            }
+        }
+        put_item = {
+            'PutRequest': {
+                'Item': item
+            }
+        }
+        put_items.append(put_item)
+        if len(put_items) == 25:
+            success = batch_write(client, put_items)
+            if not success:
+                return False
+            put_items = []
+
+    final_success = True
+    if not put_items:
+        final_success = batch_write(client, put_items)
+                    
+    return final_success
         
