@@ -9,7 +9,6 @@ import logging
 import boto3
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
 
 TXT_LINK = 'http://data.gdeltproject.org/gdeltv2/lastupdate.txt'
 
@@ -223,20 +222,29 @@ def batch_write(client, put_items) -> bool:
     except client.exceptions.ProvisionedThroughputExceededException as e:
         logger.error('Provisioned throughput exceeded')
         return False
-
+    # response is http
     if response is None:
         logger.error('No response from DynamoDB')
         return False
     # retrying unprocessed items with exponential backoff (max 64 seconds)
     t = 1
-    logger.info(f'Unprocessed items: {len(response["UnprocessedItems"])}')
-    while response['UnprocessedItems'] != {} and t <= 64:
+    unprocessed_items = response.get('UnprocessedItems', {})
+    item_num = 0 if unprocessed_items == {} else len(unprocessed_items["NewsArticles"])
+    logger.info(f'Unprocessed items: {item_num}')
+    while unprocessed_items != {} and t <= 64:
         offset = float(random.randint(0, 1000)) / 1000
         time.sleep(t + offset)
-        response = client.batch_write_item(response['UnprocessedItems']) 
+        try:
+            logger.info(f'Retrying {item_num} unprocessed items after {t} seconds')
+            response = client.batch_write_item(RequestItems=unprocessed_items) 
+        except client.exceptions.ProvisionedThroughputExceededException as e:
+            logger.error('Provisioned throughput exceeded')
+            return False
+        unprocessed_items = response.get('UnprocessedItems', {})
+        item_num = 0 if unprocessed_items == {} else len(unprocessed_items["NewsArticles"])
         t = t * 2
     put_items = []
-    if response['UnprocessedItems'] != {}:
+    if unprocessed_items != {}:
         logger.error('Failed to upload all items')
         return False
     return True
