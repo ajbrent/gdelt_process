@@ -290,8 +290,8 @@ def to_dynamodb(stamp: int, topic_dict: dict[str, list[str]]) -> bool:
             put_items = []
 
     final_success = True
-    if not put_items:
+    if put_items:
         final_success = batch_write(client, put_items)
-                    
+    logger.info('Data uploaded to DynamoDB')       
     return final_success
         
