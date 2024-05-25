@@ -10,6 +10,7 @@ import logging
 import boto3
 
 logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 TXT_LINK = 'http://data.gdeltproject.org/gdeltv2/lastupdate.txt'
 
