@@ -261,7 +261,7 @@ def to_dynamodb(stamp: int, topic_dict: dict[str, list[str]]) -> bool:
     for topic, urls in topic_dict.items():
         item = {
             'datetime': {
-                'N': stamp
+                'N': str(stamp)
             },
             'topic': {
                 'S': topic
