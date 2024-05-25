@@ -238,7 +238,7 @@ def batch_write(client, put_items) -> bool:
         offset = float(random.randint(0, 1000)) / 1000
         time.sleep(t + offset)
         try:
-            logger.info(f'Retrying {item_num} unprocessed items after {t} seconds')
+            logger.warning(f'Retrying {item_num} unprocessed items after {t} seconds')
             response = client.batch_write_item(RequestItems=unprocessed_items) 
         except client.exceptions.ProvisionedThroughputExceededException as e:
             logger.error('Provisioned throughput exceeded')
