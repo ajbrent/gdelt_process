@@ -235,7 +235,7 @@ def batch_write(client, put_items) -> bool:
     unprocessed_items = response.get('UnprocessedItems', {})
     item_num = 0 if unprocessed_items == {} else len(unprocessed_items["NewsArticles"])
     logger.info(f'Unprocessed items: {item_num}')
-    while unprocessed_items != {} and t <= 64:
+    while item_num > 0 and t <= 64:
         offset = float(random.randint(0, 1000)) / 1000
         time.sleep(t + offset)
         try:
@@ -251,13 +251,17 @@ def batch_write(client, put_items) -> bool:
     if unprocessed_items != {}:
         logger.error('Failed to upload all items')
         return False
+    logger.info('Uploaded batch to DynamoDB')
     return True
 
 def to_dynamodb(stamp: int, topic_dict: dict[str, list[str]]) -> bool:
     """Upload data to DynamoDB. Exponential backoff for partial failure."""
     # best place to get datetime?
     client = boto3.client('dynamodb')
+
     logger.info('Attached to DynamoDB')
+    logger.info(f'Uploading {len(topic_dict)} items to DynamoDB')
+
     put_items = []
     for topic, urls in topic_dict.items():
         item = {
@@ -290,8 +294,8 @@ def to_dynamodb(stamp: int, topic_dict: dict[str, list[str]]) -> bool:
             put_items = []
 
     final_success = True
-    if put_items:
+    if len(put_items) > 0:
         final_success = batch_write(client, put_items)
-    logger.info('Data uploaded to DynamoDB')       
+    logger.info('All items uploaded to DynamoDB')       
     return final_success
         
