@@ -146,8 +146,8 @@ def get_zip_links(t: int = 1, prev_stamp: int = None) -> tuple[int, dict[str, st
         
     client = boto3.client('dynamodb')
     if prev_stamp is not None:
-        _ = client.delete_item(TableName='LatestTime', Key={'LatestTime': {'N': prev_stamp}})
-    _ = client.put_item(TableName='LatestTime', Item={'LatestTime': {'N': curr_stamp}})
+        _ = client.delete_item(TableName='LatestTime', Key={'LatestTime': {'N': str(prev_stamp)}})
+    _ = client.put_item(TableName='LatestTime', Item={'LatestTime': {'N': str(curr_stamp)}})
 
     logger.info(f'successfully retrieved data for {curr_stamp}')
     return curr_stamp, link_dict
