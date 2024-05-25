@@ -1,4 +1,5 @@
 import requests
+import datetime
 import random
 import io
 import re
@@ -89,20 +90,20 @@ def check_links(link_dict: dict[str, str]) -> str:
             return None
     return curr_dt_str
 
-def get_zip_links(t: int = 1, prev_dt: str = None) -> dict[str, str]:
+def get_zip_links(t: int = 1, prev_stamp: int = None) -> tuple[int, dict[str, str]]:
     # get and unzip csv file every 15 minutes
     if t > 64:
         raise ValueError("Exceeded maximum number of retries")
     if t == 1:
         client = boto3.client('dynamodb')
         date_response = client.scan(
-            TableName='LatestDate'
+            TableName='LatestTime'
         )
         items = date_response['Items']
         if len(items) == 1: 
-            prev_dt = items[0]['LatestDate']['S']
+            prev_stamp = items[0]['LatestTime']['N']
         elif len(items) > 1:
-            raise ValueError("LatestDate should be single item table.")
+            raise ValueError("LatestTime should be single item table.")
 
     response = None
     try:
@@ -127,27 +128,29 @@ def get_zip_links(t: int = 1, prev_dt: str = None) -> dict[str, str]:
             raise ValueError("Invalid link")
 
     curr_dt = check_links(link_dict)
-
+    curr_stamp = None
     if curr_dt is None:
         raise ValueError("Invalid links")
-    if prev_dt is not None:
-        logger.info(f'Current datetime: {curr_dt}')
-        logger.info(f'Previous datetime: {prev_dt}')
-        if curr_dt == prev_dt:
+    else:
+        curr_stamp = int(datetime.datetime.strptime(curr_dt, '%Y%m%d%H%M%S').timestamp())
+    if prev_stamp is not None:
+        logger.info(f'Current timestamp: {curr_stamp}')
+        logger.info(f'Previous timestamp: {prev_stamp}')
+        if curr_stamp == prev_stamp:
             logger.warning(f'No new data available. Retrying in {t} seconds.')
             offset = float(random.randint(0, 1000)) / 1000
             time.sleep(t + offset)
-            return get_zip_links(t*2, prev_dt)
-        if int(curr_dt) < int(prev_dt):
+            return get_zip_links(t*2, prev_stamp)
+        if int(curr_stamp) < int(prev_stamp):
             raise ValueError("previously inserted datetime is newer than current datetime")
         
     client = boto3.client('dynamodb')
-    if prev_dt is not None:
-        _ = client.delete_item(TableName='LatestDate', Key={'LatestDate': {'S': prev_dt}})
-    _ = client.put_item(TableName='LatestDate', Item={'LatestDate': {'S': curr_dt}})
+    if prev_stamp is not None:
+        _ = client.delete_item(TableName='LatestTime', Key={'LatestTime': {'S': prev_stamp}})
+    _ = client.put_item(TableName='LatestTime', Item={'LatestTime': {'S': curr_stamp}})
 
-    logger.info(f'successfully retrieved data for {curr_dt}')
-    return curr_dt, link_dict
+    logger.info(f'successfully retrieved data for {curr_stamp}')
+    return curr_stamp, link_dict
 
 def rm_subtopics(topics: list[str]) -> list[str]:
     """Remove subtopics from the list of topics."""
@@ -249,7 +252,7 @@ def batch_write(client, put_items) -> bool:
         return False
     return True
 
-def to_dynamodb(dt: str, topic_dict: dict[str, list[str]]) -> bool:
+def to_dynamodb(stamp: int, topic_dict: dict[str, list[str]]) -> bool:
     """Upload data to DynamoDB. Exponential backoff for partial failure."""
     # best place to get datetime?
     client = boto3.client('dynamodb')
@@ -258,7 +261,7 @@ def to_dynamodb(dt: str, topic_dict: dict[str, list[str]]) -> bool:
     for topic, urls in topic_dict.items():
         item = {
             'datetime': {
-                'N': dt
+                'N': stamp
             },
             'topic': {
                 'S': topic
@@ -268,6 +271,9 @@ def to_dynamodb(dt: str, topic_dict: dict[str, list[str]]) -> bool:
             },
             'num_mentions': {
                 'N': str(len(urls))
+            },
+            'exp_time': {
+                'N': str(stamp + 172800)
             }
         }
         put_item = {
