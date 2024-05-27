@@ -9,6 +9,7 @@ import zipfile
 import pandas as pd
 import numpy as np
 import pyarrow as pa
+import pyarrow.parquet as pq
 
 import logging
 import boto3
@@ -229,7 +230,7 @@ def create_df(link: str) -> pd.DataFrame:
 def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
     buffer = io.BytesIO()
     table = pa.Table.from_pandas(df)
-    pa.parquet.write_table(table, buffer)
+    pq.write_table(table, buffer)
 
     buffer.seek(0)
 
