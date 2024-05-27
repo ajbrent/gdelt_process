@@ -130,5 +130,4 @@ def test_gkg_process():
     expected_df = pd.DataFrame(expected_rows, columns=df_cols)
     actual_df = gkg_process(test_df)
     for _, actual_row in actual_df.iterrows():
-        pytest.set_trace()
         assert expected_df[expected_df['topics'] == actual_row['topics']][df_cols].squeeze().equals(actual_row)
