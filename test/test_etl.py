@@ -78,14 +78,34 @@ def test_gkg_process():
     ]
     test_df = pd.DataFrame(data, columns=GKG_HEADERS)
     # will probably neet to change as data needs are changed
-    expected_dict = {
-        'Robert Kavcic"': ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        'Hassan Pirnia': ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        'Youtube': ['http://apnews.com/fake/url/test'],
-        'Test Name': ['http://reuters.com/fake/url/test'],
-        'Fifth-place Roma"': ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        'Romelu Lukaku': ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-    }
-
-    actual_dict = gkg_process(test_df)
-    assert expected_dict == actual_dict
+    df_cols =['topics', 'sources', 'urls']
+    
+    expected_rows = [[
+        'Robert Kavcic"',
+        ['apnews.com', 'reuters.com'],
+        ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test']
+    ], [
+        'Hassan Pirnia',
+        ['apnews.com', 'reuters.com'],
+        ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test']
+    ], [
+        'Youtube',
+        ['apnews.com'],
+        ['http://apnews.com/fake/url/test']
+    ], [
+        'Test Name',
+        ['reuters.com'],
+        ['http://reuters.com/fake/url/test']
+    ], [
+        'Fifth-place Roma"',
+        ['apnews.com', 'reuters.com'],
+        ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test']
+    ], [
+        'Romelu Lukaku',
+        ['apnews.com', 'reuters.com'],
+        ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test']
+    ]]
+    expected_df = pd.DataFrame(expected_rows, columns=df_cols)
+    actual_df = gkg_process(test_df)
+    for _, actual_row in actual_df.iterrows():
+        assert expected_df[expected_df['topics'] == actual_row['topics']].squeeze().equals(actual_row)

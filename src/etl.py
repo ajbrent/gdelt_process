@@ -5,9 +5,14 @@ import io
 import re
 import time
 import zipfile
+
 import pandas as pd
+import numpy as np
+import pyarrow as pa
+
 import logging
 import boto3
+import botocore
 
 logger = logging.getLogger()
 
@@ -150,7 +155,7 @@ def get_zip_links(t: int = 1, prev_stamp: int = None) -> tuple[int, dict[str, st
     _ = client.put_item(TableName='LatestTime', Item={'LatestTime': {'N': str(curr_stamp)}})
 
     logger.info(f'successfully retrieved data for {curr_stamp}')
-    return curr_stamp, link_dict
+    return curr_dt, link_dict
 
 def rm_subtopics(topics: list[str]) -> list[str]:
     """Remove subtopics from the list of topics."""
@@ -170,7 +175,7 @@ def rm_subtopics(topics: list[str]) -> list[str]:
     filtered_topics = [topics[i] for i in range(len(topics)) if i not in indexes]
     return filtered_topics
 
-def gkg_process(df: pd.DataFrame) -> dict[str, list[str]]:
+def gkg_process(df: pd.DataFrame) -> pd.DataFrame:
     """Process the GKG file."""
     # Looking only at web documents: code 1
     df = df[df['V2SOURCECOLLECTIONIDENTIFIER'] == 1]
@@ -182,7 +187,7 @@ def gkg_process(df: pd.DataFrame) -> dict[str, list[str]]:
     persons = df['V2ENHANCEDPERSONS'].astype(str).apply(lambda x: [] if x is None or x == '' else re.findall(pattern, x))
     df['TOPICS'] = all_names + orgs + persons
     df['TOPICS'] = df['TOPICS'].apply(lambda x: list(set(x)))
-    df = df[['GKG_RECORD_ID', 'V2SOURCECOMMONNAME', 'V2DOCUMENTIDENTIFIER', 'DATE', 'TOPICS']]
+    df = df[['V2SOURCECOMMONNAME', 'V2DOCUMENTIDENTIFIER', 'TOPICS']]
     df['TOPICS'] = df['TOPICS'].apply(rm_subtopics)
     
     topic_dict = {}
@@ -191,12 +196,14 @@ def gkg_process(df: pd.DataFrame) -> dict[str, list[str]]:
         url = row['V2DOCUMENTIDENTIFIER']
         for topic in row['TOPICS']:
             if topic in topic_dict:
-                topic_dict[topic].append(url)
+                topic_dict[topic][0].append(src)
+                topic_dict[topic][1].append(url)
             else:
-                topic_dict[topic] = [url]
-    return topic_dict
+                topic_dict[topic] = [[src], [url]]
+    topic_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topics', 'sources', 'urls'])
+    return topic_df
 
-def create_dict(link: str) -> dict[str, list[str]]:
+def create_df(link: str) -> pd.DataFrame:
     """Download, create dataframe and return data for DynamoDB model."""
     zip_response = None
     try:
@@ -208,93 +215,44 @@ def create_dict(link: str) -> dict[str, list[str]]:
     with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
         csv_file_name = z.namelist()[0]
         with z.open(csv_file_name) as f:
-            out_dict = {}
+            out_df = {}
             if '.gkg.' in link:
                 gkg_df = pd.read_csv(f, sep='\t', parse_dates=[1], date_format='%Y%m%d%H%M%S', dtype=GKG_DICT, names=GKG_HEADERS)
-                out_dict = gkg_process(gkg_df)
-            return out_dict
+                out_df = gkg_process(gkg_df)
+            return out_df
 
-def batch_write(client, put_items) -> bool:
-    response = None
+def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
+    buffer = io.BytesIO()
+    table = pa.Table.from_pandas(df)
+    pa.parquet.write_table(table, buffer)
+
+    buffer.seek(0)
+
+    client = boto3.client('s3')
+    file_name = dt + '-' + name
+
     try:
-        response = client.batch_write_item(
-            RequestItems={
-                'NewsArticles': put_items
-            }
-        )
-    except client.exceptions.ProvisionedThroughputExceededException as e:
-        logger.error('Provisioned throughput exceeded')
-        return False
-    # response is http
-    if response is None:
-        logger.error('No response from DynamoDB')
-        return False
-    # retrying unprocessed items with exponential backoff (max 64 seconds)
-    t = 1
-    unprocessed_items = response.get('UnprocessedItems', {})
-    item_num = 0 if unprocessed_items == {} else len(unprocessed_items["NewsArticles"])
-    logger.info(f'Unprocessed items: {item_num}')
-    while item_num > 0 and t <= 64:
-        offset = float(random.randint(0, 1000)) / 1000
-        time.sleep(t + offset)
-        try:
-            logger.warning(f'Retrying {item_num} unprocessed items after {t} seconds')
-            response = client.batch_write_item(RequestItems=unprocessed_items) 
-        except client.exceptions.ProvisionedThroughputExceededException as e:
-            logger.error('Provisioned throughput exceeded')
-            return False
-        unprocessed_items = response.get('UnprocessedItems', {})
-        item_num = 0 if unprocessed_items == {} else len(unprocessed_items["NewsArticles"])
-        t = t * 2
-    put_items = []
-    if unprocessed_items != {}:
-        logger.error('Failed to upload all items')
-        return False
-    logger.info('Uploaded batch to DynamoDB')
+        client.put_object(Bucket=bucket, Key=file_name, Body=buffer.get_value())
+    except botocore.exceptions.ClientError as error:
+        raise error
+    except botocore.exceptions.ParamValidationError as error:
+        raise ValueError('The parameters you provided are incorrect: {}'.format(error))
+
     return True
 
-def to_dynamodb(stamp: int, topic_dict: dict[str, list[str]]) -> bool:
-    """Upload data to DynamoDB. Exponential backoff for partial failure."""
-    # best place to get datetime?
-    client = boto3.client('dynamodb')
+def clean_and_upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
+    """Upload dataframe to S3."""
+    topic_df['counts'] = topic_df['urls'].apply(len)
+    topic_df['src_counts'] = topic_df['sources'].apply(lambda x: len(set(x)))
+    topic_df = topic_df[topic_df['topics'] != 'Associated Press']
+    topic_df['scores'] = np.log(topic_df['counts']) + 2 * np.log(topic_df['src_counts'])
+    topic_df = topic_df.sort_values(by='score', ascending=False)
+    topic_df = topic_df.rename_axis('id')
 
-    logger.info('Attached to DynamoDB')
-    logger.info(f'Uploading {len(topic_dict)} items to DynamoDB')
+    score_df = topic_df[['id', 'topics', 'counts', 'src_counts', 'scores']]
+    score_put = to_s3(score_df, bucket, dt, 'scores')
 
-    put_items = []
-    for topic, urls in topic_dict.items():
-        item = {
-            'datetime': {
-                'N': str(stamp)
-            },
-            'topic': {
-                'S': topic
-            },
-            'urls': {
-                'SS': urls
-            },
-            'num_mentions': {
-                'N': str(len(urls))
-            },
-            'exp_time': {
-                'N': str(stamp + 172800)
-            }
-        }
-        put_item = {
-            'PutRequest': {
-                'Item': item
-            }
-        }
-        put_items.append(put_item)
-        if len(put_items) == 25:
-            success = batch_write(client, put_items)
-            if not success:
-                return False
-            put_items = []
+    url_df = topic_df[['id', 'urls', 'sources']]
+    url_put = to_s3(url_df, bucket, dt, 'urls')
 
-    final_success = True
-    if len(put_items) > 0:
-        final_success = batch_write(client, put_items)
-    logger.info('All items uploaded to DynamoDB')       
-    return final_success
-        
+    return score_put and url_put
