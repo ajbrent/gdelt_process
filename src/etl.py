@@ -206,7 +206,6 @@ def gkg_process(df: pd.DataFrame) -> pd.DataFrame:
     topic_df = topic_df[topic_df['topics'] != 'Associated Press']
     topic_df['scores'] = topic_df.apply(lambda row: np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1, axis=1)
     topic_df = topic_df.sort_values(by='scores', ascending=False)
-    topic_df = topic_df.rename_axis('id')
     return topic_df
 
 def create_df(link: str) -> pd.DataFrame:
@@ -248,10 +247,10 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
 
 def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
     """Upload dataframe to S3."""
-    score_df = topic_df[['id', 'topics', 'counts', 'src_counts', 'scores']]
+    score_df = topic_df[['topics', 'counts', 'src_counts', 'scores']]
     score_put = to_s3(score_df, bucket, dt, 'scores')
 
-    url_df = topic_df[['id', 'urls', 'sources']]
+    url_df = topic_df[['urls', 'sources']]
     url_put = to_s3(url_df, bucket, dt, 'urls')
 
     return score_put and url_put
