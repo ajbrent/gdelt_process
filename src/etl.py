@@ -238,7 +238,7 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
     file_name = dt + '-' + name
 
     try:
-        client.put_object(Bucket=bucket, Key=file_name, Body=buffer.get_value())
+        client.put_object(Bucket=bucket, Key=file_name, Body=buffer.getvalue())
     except botocore.exceptions.ClientError as error:
         raise error
     except botocore.exceptions.ParamValidationError as error:
