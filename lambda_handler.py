@@ -8,7 +8,7 @@ S3_BUCKET = 'gdelt-data-prod'
 def lambda_handler(event, context):
     curr_dt, zip_links = etl.get_zip_links()
     topic_df = etl.create_df(zip_links['gkg'])
-    success = etl.clean_and_upload(topic_df, S3_BUCKET, curr_dt)
+    success = etl.upload(topic_df, S3_BUCKET, curr_dt)
     if not success:
         logger.error('Failed to write to S3.')
         raise Exception('Failed to write to S3.')

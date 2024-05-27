@@ -201,6 +201,12 @@ def gkg_process(df: pd.DataFrame) -> pd.DataFrame:
             else:
                 topic_dict[topic] = [[src], [url]]
     topic_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topics', 'sources', 'urls'])
+    topic_df['counts'] = topic_df['urls'].apply(len)
+    topic_df['src_counts'] = topic_df['sources'].apply(lambda x: len(set(x)))
+    topic_df = topic_df[topic_df['topics'] != 'Associated Press']
+    topic_df['scores'] = topic_df.apply(lambda row: np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1, axis=1)
+    topic_df = topic_df.sort_values(by='scores', ascending=False)
+    topic_df = topic_df.rename_axis('id')
     return topic_df
 
 def create_df(link: str) -> pd.DataFrame:
@@ -240,15 +246,8 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
 
     return True
 
-def clean_and_upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
+def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
     """Upload dataframe to S3."""
-    topic_df['counts'] = topic_df['urls'].apply(len)
-    topic_df['src_counts'] = topic_df['sources'].apply(lambda x: len(set(x)))
-    topic_df = topic_df[topic_df['topics'] != 'Associated Press']
-    topic_df['scores'] = np.log(topic_df['counts']) + 2 * np.log(topic_df['src_counts'])
-    topic_df = topic_df.sort_values(by='score', ascending=False)
-    topic_df = topic_df.rename_axis('id')
-
     score_df = topic_df[['id', 'topics', 'counts', 'src_counts', 'scores']]
     score_put = to_s3(score_df, bucket, dt, 'scores')
 
