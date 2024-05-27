@@ -1,5 +1,9 @@
 FROM mcr.microsoft.com/vscode/devcontainers/miniconda:0-3
 
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends gcc g++ \
+    && apt-get clean
+
 RUN conda install -n base -c conda-forge mamba
 
 COPY .devcontainer/environment.yml* .devcontainer/noop.txt /tmp/conda-tmp/
@@ -16,6 +20,5 @@ RUN echo "source activate base" > ~/.bashrc
 #     && pip install --no-cache-dir pipx \
 #     && pipx reinstall-all
 # [Optional] Uncomment this section to install additional OS packages.
-# RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
-#     && apt-get -y install --no-install-recommends <your-package-list-here>
+
 
