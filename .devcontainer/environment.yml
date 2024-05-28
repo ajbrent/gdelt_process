@@ -3,7 +3,6 @@ channels:
   - defaults
 dependencies:
   - python=3.11
-  - pandas=2.2
   - requests
   - numpy
   - ipython
@@ -12,4 +11,4 @@ dependencies:
   - pip:
     - boto3
     - pyarrow
-
+    - pandas
