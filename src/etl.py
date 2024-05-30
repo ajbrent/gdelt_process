@@ -251,7 +251,7 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     client = boto3.client('s3')
     response = None
     try:
-        response = client.get_object(Bucket=bucket, Key=dt + '-scores')
+        response = client.get_object(Bucket=bucket, Key=dt + '-day-scores')
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] != 'NoSuchKey':
             raise error
@@ -293,7 +293,7 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
         merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
     
     merge_df = merge_df[merge_df['day_counts'] > 0]
-    _ = client.put_object(Bucket=bucket, Key=dt + '-scores.parquet', Body=merge_df.to_parquet())
+    _ = client.put_object(Bucket=bucket, Key=dt + '-day-scores.parquet', Body=merge_df.to_parquet())
     return True
 
 def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
