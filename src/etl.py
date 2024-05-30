@@ -271,7 +271,7 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     merge_df['day_scores'] = merge_df['day_scores'] + merge_df['scores']
     merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
 
-    dead_time = datetime.strptime(dt, '%Y%m%d%H%M%S') - datetime.timedelta(days=1)
+    dead_time = datetime.datetime.strptime(dt, '%Y%m%d%H%M%S') - datetime.timedelta(days=1)
     old_file = dead_time.strftime('%Y%m%d%H%M%S') + '-scores'
     old_response = None
     try:
