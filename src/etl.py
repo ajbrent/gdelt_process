@@ -246,12 +246,63 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
 
     return True
 
+def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
+    """Update scores in S3."""
+    client = boto3.client('s3')
+    response = None
+    try:
+        response = client.get_object(Bucket=bucket, Key=dt + '-scores')
+    except botocore.exceptions.ClientError as error:
+        if error.response['Error']['Code'] != 'NoSuchKey':
+            raise error
+    except botocore.exceptions.ParamValidationError as error:
+        raise ValueError('The parameters you provided are incorrect: {}'.format(error))
+    
+    curr_df = pd.DataFrame(columns=['topics', 'day_counts', 'day_src_counts', 'day_scores'])
+    if response is not None:
+        buffer = io.BytesIO(response['Body'].read())
+        curr_table = pq.read_table(buffer)
+        curr_df = curr_table.to_pandas()
+
+    merge_df = pd.merge(curr_df, new_data, on='topics', how='outer')
+    merge_df.fillna(0, inplace=True)
+    merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
+    merge_df['day_src_counts'] = merge_df['day_src_counts'] + merge_df['src_counts']
+    merge_df['day_scores'] = merge_df['day_scores'] + merge_df['scores']
+    merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
+
+    dead_time = datetime.strptime(dt, '%Y%m%d%H%M%S') - datetime.timedelta(days=1)
+    old_file = dead_time.strftime('%Y%m%d%H%M%S') + '-scores'
+    old_response = None
+    try:
+        old_response = client.get_object(Bucket=bucket, Key=old_file)
+    except botocore.exceptions.ClientError as error:
+        raise error
+    except botocore.exceptions.ParamValidationError as error:
+        raise ValueError('The parameters you provided are incorrect: {}'.format(error))
+
+    if old_response is not None:
+        old_buffer = io.BytesIO(old_response['Body'].read())
+        old_table = pq.read_table(old_buffer)
+        old_df = old_table.to_pandas()
+        merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
+        merge_df.fillna(0, inplace=True)
+        merge_df['day_counts'] = merge_df['day_counts'] - merge_df['counts']
+        merge_df['day_src_counts'] = merge_df['day_src_counts'] - merge_df['src_counts']
+        merge_df['day_scores'] = merge_df['day_scores'] - merge_df['scores']
+        merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
+    
+    merge_df = merge_df[merge_df['day_counts'] > 0]
+    _ = client.put_object(Bucket=bucket, Key=dt + '-scores.parquet', Body=merge_df.to_parquet())
+    return True
+
 def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
     """Upload dataframe to S3."""
     score_df = topic_df[['topics', 'counts', 'src_counts', 'scores']]
     score_put = to_s3(score_df, bucket, dt, 'scores')
+    is_update = update_scores(score_df, bucket, dt)
 
     url_df = topic_df[['urls', 'sources']]
     url_put = to_s3(url_df, bucket, dt, 'urls')
 
-    return score_put and url_put
+    return (score_put and url_put) and is_update
