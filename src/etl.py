@@ -235,10 +235,10 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
     buffer.seek(0)
 
     client = boto3.client('s3')
-    file_name = dt + '-' + name
+    file_name = dt + '-' + name + '.parquet'
 
     try:
-        client.put_object(Bucket=bucket, Key=file_name, Body=buffer.getvalue())
+        _ = client.put_object(Bucket=bucket, Key=file_name, Body=buffer.getvalue())
     except botocore.exceptions.ClientError as error:
         raise error
     except botocore.exceptions.ParamValidationError as error:
@@ -251,7 +251,7 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     client = boto3.client('s3')
     response = None
     try:
-        response = client.get_object(Bucket=bucket, Key=dt + '-day-scores')
+        response = client.get_object(Bucket=bucket, Key=dt + '-day-scores.parquet')
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] != 'NoSuchKey':
             raise error
@@ -272,14 +272,14 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
 
     dead_time = datetime.datetime.strptime(dt, '%Y%m%d%H%M%S') - datetime.timedelta(days=1)
-    old_file = dead_time.strftime('%Y%m%d%H%M%S') + '-scores'
+    old_file = dead_time.strftime('%Y%m%d%H%M%S') + '-scores.parquet'
     old_response = None
     try:
         old_response = client.get_object(Bucket=bucket, Key=old_file)
     except botocore.exceptions.ClientError as error:
         raise error
     except botocore.exceptions.ParamValidationError as error:
-        raise ValueError('The parameters you provided are incorrect: {}'.format(error))
+        raise ValueError('The parameters provided are incorrect: {}'.format(error))
 
     if old_response is not None:
         old_buffer = io.BytesIO(old_response['Body'].read())
