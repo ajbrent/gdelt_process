@@ -298,7 +298,7 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
         merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
     
     merge_df = merge_df[merge_df['day_counts'] > 0]
-    _ = client.put_object(Bucket=bucket, Key=dt + '-day-scores.parquet', Body=merge_df.to_parquet())
+    _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
     return True
 
 def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
