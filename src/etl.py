@@ -255,6 +255,8 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] != 'NoSuchKey':
             raise error
+        else:
+            response = None
     except botocore.exceptions.ParamValidationError as error:
         raise ValueError('The parameters you provided are incorrect: {}'.format(error))
     
@@ -279,6 +281,8 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] != 'NoSuchKey':
             raise error
+        else:
+            old_response = None
     except botocore.exceptions.ParamValidationError as error:
         raise ValueError('The parameters provided are incorrect: {}'.format(error))
 
