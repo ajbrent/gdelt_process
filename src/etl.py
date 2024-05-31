@@ -277,7 +277,8 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     try:
         old_response = client.get_object(Bucket=bucket, Key=old_file)
     except botocore.exceptions.ClientError as error:
-        raise error
+        if error.response['Error']['Code'] != 'NoSuchKey':
+            raise error
     except botocore.exceptions.ParamValidationError as error:
         raise ValueError('The parameters provided are incorrect: {}'.format(error))
 
