@@ -251,11 +251,12 @@ def update_scores(new_data: pd.DataFrame, bucket: str, dt: str) -> bool:
     client = boto3.client('s3')
     response = None
     try:
-        response = client.get_object(Bucket=bucket, Key=dt + '-day-scores.parquet')
+        response = client.get_object(Bucket=bucket, Key='day-scores.parquet')
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] != 'NoSuchKey':
             raise error
         else:
+            logger.info('No previous scores found.')
             response = None
     except botocore.exceptions.ParamValidationError as error:
         raise ValueError('The parameters you provided are incorrect: {}'.format(error))
