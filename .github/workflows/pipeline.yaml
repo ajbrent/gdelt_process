@@ -5,6 +5,12 @@ on:
     branches:
       - 'main'
       - 'feature**'
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - '.devcontainer/**'
+      - '.gitignore'
+      - 'LICENSE'
   delete:
     branches:
       - 'feature**'
