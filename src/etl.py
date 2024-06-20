@@ -282,7 +282,6 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
         raise error
     except botocore.exceptions.ParamValidationError as error:
         raise ValueError('The parameters you provided are incorrect: {}'.format(error))
-
     return True
 
 def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, dt: str) -> bool:

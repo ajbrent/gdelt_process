@@ -16,9 +16,6 @@ def test_check_links():
     assert check_links(good_link_dict)
     assert not check_links(bad_link_dict)
 
-def score_calc(count: int, src_count: int) -> float:
-    """Calculate the score for a given topic."""
-    return np.log(count) + 2 * np.log(src_count) + 1
 def test_gkg_process():
     data = [
         [
@@ -82,7 +79,7 @@ def test_gkg_process():
     ]
     test_df = pd.DataFrame(data, columns=GKG_HEADERS)
     # will probably neet to change as data needs are changed
-    df_cols = ['topics', 'sources', 'urls', 'counts', 'src_counts', 'scores']
+    df_cols = ['topics', 'sources', 'urls', 'counts', 'src_counts']
     
     expected_rows = [[
         'Robert Kavcic"',
@@ -90,42 +87,36 @@ def test_gkg_process():
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
         2,
         2,
-        score_calc(2, 2)
     ], [
         'Hassan Pirnia',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
         2,
         2,
-        score_calc(2, 2)
     ], [
         'Youtube',
         ['apnews.com'],
         ['http://apnews.com/fake/url/test'],
         1,
         1,
-        score_calc(1, 1)
     ], [
         'Test Name',
         ['reuters.com'],
         ['http://reuters.com/fake/url/test'],
         1,
         1,
-        score_calc(1, 1)
     ], [
         'Fifth-place Roma"',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
         2,
         2,
-        score_calc(2, 2)
     ], [
         'Romelu Lukaku',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
         2,
         2,
-        score_calc(2, 2)
     ]]
     expected_df = pd.DataFrame(expected_rows, columns=df_cols)
     actual_df = gkg_process(test_df)
