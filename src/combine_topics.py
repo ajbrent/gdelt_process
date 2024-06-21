@@ -96,12 +96,12 @@ def score_func(row: pd.Series) -> float:
     """Calculate geometric mean logged for topic."""
     return np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1
 
-def topic_agg_func(df: pd.DataFrame) -> pd.DataFrame:
+def topic_agg_func(df) -> pd.DataFrame:
     """Aggregate the dataframe."""
     new_url_list = []
     new_src_list = []
     tuple_list = []
-    for url_list, src_list in zip(df.urls, df.sources):
+    for url_list, src_list in zip(df['urls'], df['sources']):
         for url, src in zip(url_list, src_list):
             tuple_list.append((src, url))
     tuple_list = list(set(tuple_list))
