@@ -15,8 +15,8 @@ import logging
 import boto3
 import botocore
 
-from . import combine_topics
-from . import utils
+from .combine_topics import *
+from .utils import *
 
 logger = logging.getLogger()
 
@@ -257,10 +257,10 @@ def topic_agg_func(df: pd.DataFrame) -> pd.DataFrame:
 def combine_df_topics(df: pd.DataFrame):
     url_list = df.urls.tolist()
     topic_list = df.topics.tolist()
-    topic_graph = combine_topics.create_topic_graph(url_list, 0.75)
-    old_df = utils.df_from_bucket('gdelt-scores', 'day-scores.parquet')
+    topic_graph = create_topic_graph(url_list, 0.75)
+    old_df = df_from_bucket('gdelt-scores', 'day-scores.parquet')
     old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
-    topic_remap = combine_topics.combine_topics(topic_list, topic_graph, old_set)
+    topic_remap = combine_topics(topic_list, topic_graph, old_set)
     df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
     df.groupby('topics').agg(topic_agg_func)
     df['scores'] = df.apply(score_func, axis=1)
@@ -298,7 +298,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
     dead_time = datetime.datetime.strptime(dt, '%Y%m%d%H%M%S') - datetime.timedelta(days=1)
     old_file = dead_time.strftime('%Y%m%d%H%M%S') + '-scores.parquet'
 
-    old_df = utils.df_from_bucket(bucket, old_file)
+    old_df = df_from_bucket(bucket, old_file)
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
         merge_df.fillna(0, inplace=True)
