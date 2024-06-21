@@ -15,8 +15,8 @@ import logging
 import boto3
 import botocore
 
-from .combine_topics import *
-from .utils import *
+from combine_topics import *
+from utils import *
 
 logger = logging.getLogger()
 
