@@ -1,4 +1,5 @@
 from src import etl
+from src import combine_topics
 from src import utils
 import datetime
 import logging
@@ -10,7 +11,7 @@ S3_BUCKET = 'gdelt-data-prod'
 def lambda_handler(event, context):
     curr_dt, zip_links = etl.get_zip_links()
     topic_df = etl.create_df(zip_links['gkg'])
-    combine_df = etl.combine_df(topic_df)
+    combine_df = combine_topics.combine_df_topics(topic_df)
 
     scores_file = 'day-scores.parquet'
     scores_df = etl.create_scores_df(S3_BUCKET, scores_file)
