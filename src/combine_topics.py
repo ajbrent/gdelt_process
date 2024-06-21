@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 
 class Graph:
     def __init__(self, size: int):
@@ -90,6 +91,39 @@ def combine_topics(topic_list: list[str], overlap_graph: Graph, topic_set: set) 
         for topic in group_list:
             topic_remap[topic] = umbrella
     return topic_remap
-           
 
+def score_func(row: pd.Series) -> float:
+    """Calculate geometric mean logged for topic."""
+    return np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1
+
+def topic_agg_func(df: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate the dataframe."""
+    new_url_list = []
+    new_src_list = []
+    tuple_list = []
+    for url_list, src_list in zip(df.urls, df.sources):
+        for url, src in zip(url_list, src_list):
+            tuple_list.append((src, url))
+    tuple_list = list(set(tuple_list))
+    for pair in tuple_list:
+        new_src_list.append(pair[0])
+        new_url_list.append(pair[1])
+    new_df = pd.DataFrame({
+        'topics': df['topic'],
+        'sources': new_src_list,
+        'urls': new_url_list,
+        'counts': len(new_url_list),
+        'src_counts': len(set(new_src_list)),
+    })
+    return new_df
+def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
+    url_list = df.urls.tolist()
+    topic_list = df.topics.tolist()
+    topic_graph = create_topic_graph(url_list, 0.75)
+    old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
+    topic_remap = combine_topics(topic_list, topic_graph, old_set)
+    df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
+    df.groupby('topics').agg(topic_agg_func)
+    df['scores'] = df.apply(score_func, axis=1)
+    return df
 

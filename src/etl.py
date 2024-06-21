@@ -15,9 +15,6 @@ import logging
 import boto3
 import botocore
 
-from combine_topics import *
-from utils import *
-
 logger = logging.getLogger()
 
 TXT_LINK = 'http://data.gdeltproject.org/gdeltv2/lastupdate.txt'
@@ -229,43 +226,6 @@ def create_df(link: str) -> pd.DataFrame:
 
     return out_df
 
-def score_func(row: pd.Series) -> float:
-    """Calculate geometric mean logged for topic."""
-    return np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1
-
-def topic_agg_func(df: pd.DataFrame) -> pd.DataFrame:
-    """Aggregate the dataframe."""
-    new_url_list = []
-    new_src_list = []
-    tuple_list = []
-    for url_list, src_list in zip(df.urls, df.sources):
-        for url, src in zip(url_list, src_list):
-            tuple_list.append((src, url))
-    tuple_list = list(set(tuple_list))
-    for pair in tuple_list:
-        new_src_list.append(pair[0])
-        new_url_list.append(pair[1])
-    new_df = pd.DataFrame({
-        'topics': df['topic'],
-        'sources': new_src_list,
-        'urls': new_url_list,
-        'counts': len(new_url_list),
-        'src_counts': len(set(new_src_list)),
-    })
-    return new_df
-
-def combine_df_topics(df: pd.DataFrame):
-    url_list = df.urls.tolist()
-    topic_list = df.topics.tolist()
-    topic_graph = create_topic_graph(url_list, 0.75)
-    old_df = df_from_bucket('gdelt-scores', 'day-scores.parquet')
-    old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
-    topic_remap = combine_topics(topic_list, topic_graph, old_set)
-    df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
-    df.groupby('topics').agg(topic_agg_func)
-    df['scores'] = df.apply(score_func, axis=1)
-    return df
-
 def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
     buffer = io.BytesIO()
     table = pa.Table.from_pandas(df)
@@ -284,7 +244,11 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
         raise ValueError('The parameters you provided are incorrect: {}'.format(error))
     return True
 
-def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, dt: str) -> bool:
+def score_func(row: pd.Series) -> float:
+    """Calculate geometric mean logged for topic."""
+    return np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1
+
+def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, old_df: pd.DataFrame) -> bool:
     """Update scores in S3."""
     client = boto3.client('s3')
 
@@ -295,16 +259,12 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
     merge_df['day_scores'] = merge_df.apply(score_func, axis=1)
     merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
 
-    dead_time = datetime.datetime.strptime(dt, '%Y%m%d%H%M%S') - datetime.timedelta(days=1)
-    old_file = dead_time.strftime('%Y%m%d%H%M%S') + '-scores.parquet'
-
-    old_df = df_from_bucket(bucket, old_file)
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
         merge_df.fillna(0, inplace=True)
         merge_df['day_counts'] = merge_df['day_counts'] - merge_df['counts']
         merge_df['day_src_counts'] = merge_df['day_src_counts'] - merge_df['src_counts']
-        merge_df['day_scores'] = merge_df['day_scores'] - merge_df['scores']
+        merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
         merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
     
     merge_df = merge_df[merge_df['day_counts'] > 0]
@@ -315,9 +275,8 @@ def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
     """Upload dataframe to S3."""
     score_df = topic_df[['topics', 'counts', 'src_counts', 'scores']]
     score_put = to_s3(score_df, bucket, dt, 'scores')
-    is_update = update_scores(score_df, bucket, dt)
 
     url_df = topic_df[['urls', 'sources']]
     url_put = to_s3(url_df, bucket, dt, 'urls')
 
-    return (score_put and url_put) and is_update
+    return (score_put and url_put)
