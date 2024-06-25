@@ -96,26 +96,12 @@ def score_func(row: pd.Series) -> float:
     """Calculate geometric mean logged for topic."""
     return np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1
 
-def topic_agg_func(df) -> pd.DataFrame:
-    """Aggregate the dataframe."""
-    new_url_list = []
-    new_src_list = []
-    tuple_list = []
-    for url_list, src_list in zip(df['urls'], df['sources']):
-        for url, src in zip(url_list, src_list):
-            tuple_list.append((src, url))
-    tuple_list = list(set(tuple_list))
-    for pair in tuple_list:
-        new_src_list.append(pair[0])
-        new_url_list.append(pair[1])
-    new_df = pd.DataFrame({
-        'topics': df['topic'],
-        'sources': new_src_list,
-        'urls': new_url_list,
-        'counts': len(new_url_list),
-        'src_counts': len(set(new_src_list)),
-    })
-    return new_df
+def merge_lists(lists):
+    merged = []
+    for l in lists:
+        merged += l
+    return merged
+
 def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     url_list = df.urls.tolist()
     topic_list = df.topics.tolist()
@@ -123,7 +109,12 @@ def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
     topic_remap = combine_topics(topic_list, topic_graph, old_set)
     df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
-    df.groupby('topics').agg(topic_agg_func)
-    df['scores'] = df.apply(score_func, axis=1)
+    df = df.agg({
+        'sources': merge_lists,
+        'urls': merge_lists,
+    }).reset_index()
+    df['counts'] = df['sources'].apply(len)
+    df['src_counts'] = df['urls'].apply(lambda x: len(set(x)))
+    df['score'] = df.apply(score_func, axis=1)
     return df
 
