@@ -110,7 +110,7 @@ def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
     topic_remap = combine_topics(topic_list, topic_graph, old_set)
     df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
-    df = df.agg({
+    df = df.groupby('topics').agg({
         'sources': merge_lists,
         'urls': merge_lists,
     }).reset_index()
