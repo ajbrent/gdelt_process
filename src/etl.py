@@ -221,7 +221,7 @@ def create_df(link: str) -> pd.DataFrame:
         with z.open(csv_file_name) as f:
             out_df = {}
             if '.gkg.' in link:
-                gkg_df = pd.read_csv(f, sep='\t', parse_dates=[1], date_format='%Y%m%d%H%M%S', dtype=GKG_DICT, names=GKG_HEADERS)
+                gkg_df = pd.read_csv(f, sep='\t', parse_dates=[1], date_format='%Y%m%d%H%M%S', dtype=GKG_DICT, names=GKG_HEADERS, encoding='latin-1')
                 out_df = gkg_process(gkg_df)
 
     return out_df
