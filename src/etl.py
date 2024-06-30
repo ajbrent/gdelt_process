@@ -256,20 +256,28 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
     if scores_df is not None:
         merge_df = pd.merge(scores_df, new_data, on='topics', how='outer')
         merge_df.fillna(0, inplace=True)
-        merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
-        merge_df['day_src_counts'] = merge_df['day_src_counts'] + merge_df['src_counts']
-        merge_df['day_scores'] = merge_df.apply(score_func, axis=1)
-        merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
+    else:
+        merge_df['day_counts'] = 0
+        merge_df['day_src_counts'] = 0
+        merge_df['day_scores'] = 0
+
+    merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
+    merge_df['day_src_counts'] = merge_df['day_src_counts'] + merge_df['src_counts']
+    merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
 
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
         merge_df.fillna(0, inplace=True)
-        merge_df['day_counts'] = merge_df['day_counts'] - merge_df['counts']
-        merge_df['day_src_counts'] = merge_df['day_src_counts'] - merge_df['src_counts']
-        merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
-        merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
-    
+    else:
+        merge_df['counts'] = 0
+        merge_df['src_counts'] = 0
+
+    merge_df['day_counts'] = merge_df['day_counts'] - merge_df['counts']
+    merge_df['day_src_counts'] = merge_df['day_src_counts'] - merge_df['src_counts']
+    merge_df['day_scores'] = merge_df.apply(score_func, axis=1)
+    merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
     merge_df = merge_df[merge_df['day_counts'] > 0]
+    
     _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
     return True
 
