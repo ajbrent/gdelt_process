@@ -263,7 +263,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
 
     merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
     merge_df['day_src_counts'] = merge_df['day_src_counts'] + merge_df['src_counts']
-    merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
+    merge_df = merge_df.drop(columns=['counts', 'src_counts'])
 
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
@@ -275,7 +275,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
     merge_df['day_counts'] = merge_df['day_counts'] - merge_df['counts']
     merge_df['day_src_counts'] = merge_df['day_src_counts'] - merge_df['src_counts']
     merge_df['day_scores'] = merge_df.apply(score_func, axis=1)
-    merge_df = merge_df.drop(columns=['counts', 'src_counts', 'scores'])
+    merge_df = merge_df.drop(columns=['counts', 'src_counts'])
     merge_df = merge_df[merge_df['day_counts'] > 0]
     
     _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
@@ -283,7 +283,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
 
 def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
     """Upload dataframe to S3."""
-    score_df = topic_df[['topics', 'counts', 'src_counts', 'scores']]
+    score_df = topic_df[['topics', 'counts', 'src_counts']]
     score_put = to_s3(score_df, bucket, dt, 'scores')
 
     url_df = topic_df[['urls', 'sources']]
