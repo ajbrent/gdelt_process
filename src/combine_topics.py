@@ -116,6 +116,5 @@ def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     }).reset_index()
     df['counts'] = df['sources'].apply(len)
     df['src_counts'] = df['urls'].apply(lambda x: len(set(x)))
-    df['score'] = df.apply(score_func, axis=1)
     return df
 
