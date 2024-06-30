@@ -50,6 +50,7 @@ def dfs_connections(graph: Graph, start: int, visited: set):
     """Depth first search on the graph."""
     # not sure why defaulting to set() here causes visited to carry over from previous calls
     visited.add(start)
+    # recusion error
     for dest in graph.vertices[start]:
         if dest not in visited:
             visited = dfs_connections(graph, dest, visited)
@@ -105,7 +106,7 @@ def merge_lists(lists):
 def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     url_list = df.urls.tolist()
     topic_list = df.topics.tolist()
-    topic_graph = create_topic_graph(url_list, 0.75)
+    topic_graph = create_topic_graph(url_list, 0.9)
     old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
     topic_remap = combine_topics(topic_list, topic_graph, old_set)
     df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
