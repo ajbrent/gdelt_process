@@ -3,12 +3,13 @@ from src import combine_topics
 from src import utils
 import datetime
 import logging
-import os
+import sys
 
 logger = logging.getLogger()
 S3_BUCKET = 'gdelt-data-prod'
 
 def lambda_handler(event, context):
+    sys.setrecursionlimit(10000)
     curr_dt, zip_links = etl.get_zip_links()
     topic_df = etl.create_df(zip_links['gkg'])
 

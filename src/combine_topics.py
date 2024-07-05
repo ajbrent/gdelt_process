@@ -38,27 +38,23 @@ class Graph:
 
 def create_topic_graph(url_lists: list[list[str]], min_overlap: float) -> list[list[int]]:
     """Using graph class above to create a graph of topics based on the overlap between them."""
-    try:
-        overlap_graph = Graph(len(url_lists))
-        for i in np.arange(len(url_lists)):
-            topic_set_i = set(url_lists[i])
-            for j in np.arange(i + 1, len(url_lists)):
-                topic_set_j = set(url_lists[j])
-                overlap_coeff= len(topic_set_i.intersection(topic_set_j))/min(len(topic_set_i), len(topic_set_j))
-                if overlap_coeff >= min_overlap:
-                    overlap_graph.add_edge(i, j)
-        overlap_graph.commit_edges()
-        return overlap_graph
-    except RecursionError as e:
-        logger.debug(f"Recursion error: {e}")
-        new_min_overlap = min_overlap + (1 - min_overlap) / 2
-        return create_topic_graph(url_lists, new_min_overlap)
+    overlap_graph = Graph(len(url_lists))
+    for i in np.arange(len(url_lists)):
+        topic_set_i = set(url_lists[i])
+        for j in np.arange(i + 1, len(url_lists)):
+            topic_set_j = set(url_lists[j])
+            overlap_coeff= len(topic_set_i.intersection(topic_set_j))/min(len(topic_set_i), len(topic_set_j))
+            if overlap_coeff >= min_overlap:
+                overlap_graph.add_edge(i, j)
+    overlap_graph.commit_edges()
+    return overlap_graph
+
 
 def dfs_connections(graph: Graph, start: int, visited: set):
     """Depth first search on the graph."""
     # not sure why defaulting to set() here causes visited to carry over from previous calls
     visited.add(start)
-    # recusion error
+    # recursion error
     for dest in graph.vertices[start]:
         if dest not in visited:
             visited = dfs_connections(graph, dest, visited)
