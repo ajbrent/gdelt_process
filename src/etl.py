@@ -269,7 +269,9 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
         merge_df.fillna(0, inplace=True)
+        merge_df = merge_df.drop(columns=['urls'])
     else:
+        merge_df['sources'] = []
         merge_df['counts'] = 0
         merge_df['src_counts'] = 0
     # old source counts are problematic
@@ -280,7 +282,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
 
     merge_df = merge_df[merge_df['day_counts'] > 0]
     merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
-    merge_df = merge_df.drop(columns=['sources', 'urls', 'counts', 'src_counts'])
+    merge_df = merge_df.drop(columns=['sources', 'counts', 'src_counts'])
     
     _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
     return True
