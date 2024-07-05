@@ -258,6 +258,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
         merge_df.fillna(0, inplace=True)
     else:
         merge_df['day_counts'] = 0
+        merge_df['day_sources'] = []
         merge_df['day_src_counts'] = 0
         merge_df['day_scores'] = 0
 
