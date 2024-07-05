@@ -271,22 +271,20 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
     else:
         merge_df['counts'] = 0
         merge_df['src_counts'] = 0
-
+    # old source counts are problematic
     merge_df['day_counts'] = merge_df['day_counts'] - merge_df['counts']
-    merge_df['day_src_counts'] = merge_df['day_src_counts'] - merge_df['src_counts']
+    merge_df['day_sources'] = merge_df['sources'] + merge_df['day_sources']
+    merge_df['day_sources'] = merge_df['day_sources'].apply(lambda x: list(set(x)))
+    merge_df['day_src_counts'] = len(merge_df['day_sources'])
+
     merge_df = merge_df[merge_df['day_counts'] > 0]
     merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
-    merge_df = merge_df.drop(columns=['counts', 'src_counts'])
+    merge_df = merge_df.drop(columns=['sources', 'urls', 'counts', 'src_counts'])
     
     _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
     return True
 
 def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
     """Upload dataframe to S3."""
-    score_df = topic_df[['topics', 'counts', 'src_counts']]
-    score_put = to_s3(score_df, bucket, dt, 'scores')
-
-    url_df = topic_df[['urls', 'sources']]
-    url_put = to_s3(url_df, bucket, dt, 'urls')
-
-    return (score_put and url_put)
+    df_put = to_s3(topic_df, bucket, dt, 'scores')
+    return df_put
