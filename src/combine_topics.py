@@ -106,7 +106,7 @@ def merge_lists(lists):
 def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     url_list = df.urls.tolist()
     topic_list = df.topics.tolist()
-    topic_graph = create_topic_graph(url_list, 0.9)
+    topic_graph = create_topic_graph(url_list, 0.95)
     old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
     topic_remap = combine_topics(topic_list, topic_graph, old_set)
     df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
