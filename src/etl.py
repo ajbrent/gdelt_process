@@ -271,7 +271,7 @@ def update_scores(new_data: pd.DataFrame, scores_df: pd.DataFrame, bucket: str, 
         merge_df.fillna(0, inplace=True)
         merge_df = merge_df.drop(columns=['urls'])
     else:
-        merge_df['sources'] = []
+        merge_df['sources'] = [[] for _ in range(len(merge_df))]
         merge_df['counts'] = 0
         merge_df['src_counts'] = 0
     # old source counts are problematic
