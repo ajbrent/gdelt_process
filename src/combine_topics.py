@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Graph:
     def __init__(self, size: int):
@@ -35,16 +38,21 @@ class Graph:
 
 def create_topic_graph(url_lists: list[list[str]], min_overlap: float) -> list[list[int]]:
     """Using graph class above to create a graph of topics based on the overlap between them."""
-    overlap_graph = Graph(len(url_lists))
-    for i in np.arange(len(url_lists)):
-        topic_set_i = set(url_lists[i])
-        for j in np.arange(i + 1, len(url_lists)):
-            topic_set_j = set(url_lists[j])
-            overlap_coeff= len(topic_set_i.intersection(topic_set_j))/min(len(topic_set_i), len(topic_set_j))
-            if overlap_coeff >= min_overlap:
-                overlap_graph.add_edge(i, j)
-    overlap_graph.commit_edges()
-    return overlap_graph
+    try:
+        overlap_graph = Graph(len(url_lists))
+        for i in np.arange(len(url_lists)):
+            topic_set_i = set(url_lists[i])
+            for j in np.arange(i + 1, len(url_lists)):
+                topic_set_j = set(url_lists[j])
+                overlap_coeff= len(topic_set_i.intersection(topic_set_j))/min(len(topic_set_i), len(topic_set_j))
+                if overlap_coeff >= min_overlap:
+                    overlap_graph.add_edge(i, j)
+        overlap_graph.commit_edges()
+        return overlap_graph
+    except RecursionError as e:
+        logger.debug(f"Recursion error: {e}")
+        new_min_overlap = min_overlap + (1 - min_overlap) / 2
+        return create_topic_graph(url_lists, new_min_overlap)
 
 def dfs_connections(graph: Graph, start: int, visited: set):
     """Depth first search on the graph."""
@@ -106,7 +114,7 @@ def merge_lists(lists):
 def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     url_list = df.urls.tolist()
     topic_list = df.topics.tolist()
-    topic_graph = create_topic_graph(url_list, 0.95)
+    topic_graph = create_topic_graph(url_list, 0.75)
     old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
     topic_remap = combine_topics(topic_list, topic_graph, old_set)
     df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
