@@ -281,7 +281,7 @@ def update_scores(
         src_merge_df = pd.merge(srcs_df, new_srcs, on=['topics', 'sources'], how='outer')
         merge_df.fillna(0, inplace=True)
         src_merge_df['day_src_counts'] = src_merge_df['day_src_counts'] + src_merge_df['counts']
-        src_merge_df.drop(['counts'], inplace=True)
+        src_merge_df.drop(columns=['counts'], inplace=True)
     else:
         src_merge_df.rename(columns={'counts': 'day_src_counts'}, inplace=True)
 
