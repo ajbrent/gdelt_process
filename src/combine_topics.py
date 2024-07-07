@@ -122,6 +122,6 @@ def combine_df_topics(df: pd.DataFrame, src_df: pd.DataFrame, old_df: pd.DataFra
     df['src_counts'] = df['urls'].apply(lambda x: len(set(x)))
 
     src_df['topics'] = src_df['topics'].apply(lambda x: topic_remap[x])
-    src_df['counts'] = src_df.groupby(['topics', 'sources']).size()
+    src_df = src_df.groupby(['topics', 'sources']).agg('size').reset_index(name='counts')
     return df, src_df
 
