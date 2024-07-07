@@ -303,7 +303,9 @@ def update_scores(
     src_merge_df = src_merge_df[src_merge_df['topic_src_counts'] > 0]
     src_count_df = src_merge_df.groupby('topics').agg('size').reset_index(name='topic_src_counts')
 
-    merge_df = pd.merge(merge_df, src_count_df, on='topics', how='right')
+    merge_df = pd.merge(merge_df, src_count_df, on='topics', how='outer')
+    logger.warning(merge_df)
+    merge_df.fillna(0, inplace=True)
 
     merge_df = merge_df[merge_df['day_counts'] > 0]
     merge_df['day_src_counts'] = merge_df['topic_src_counts']
