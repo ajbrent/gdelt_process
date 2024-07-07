@@ -137,5 +137,4 @@ def test_gkg_process():
     for _, actual_row in actual_df.iterrows():
         assert expected_df[expected_df['topics'] == actual_row['topics']][df_cols].squeeze().equals(actual_row)
     for _, actual_row in actual_src_df.iterrows():
-        pytest.set_trace()
         assert expected_src_df[(expected_src_df['topics'] == actual_row['topics']) & (expected_src_df['sources'] == actual_row['sources'])].squeeze().equals(actual_row)
