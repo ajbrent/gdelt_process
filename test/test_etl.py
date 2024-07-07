@@ -118,7 +118,24 @@ def test_gkg_process():
         2,
         2,
     ]]
+
+    expected_src_rows = [
+        ['Robert Kavcic"', 'apnews.com', 1],
+        ['Robert Kavcic"', 'reuters.com', 1],
+        ['Hassan Pirnia', 'apnews.com', 1],
+        ['Hassan Pirnia', 'reuters.com', 1],
+        ['Test Name', 'reuters.com', 1],
+        ['Youtube', 'apnews.com', 1],
+        ['Fifth-place Roma"', 'apnews.com', 1],
+        ['Fifth-place Roma"', 'reuters.com', 1],
+        ['Romelu Lukaku', 'apnews.com', 1],
+        ['Romelu Lukaku', 'reuters.com', 1]
+    ]
     expected_df = pd.DataFrame(expected_rows, columns=df_cols)
-    actual_df = gkg_process(test_df)
+    expected_src_df = pd.DataFrame(expected_src_rows, columns=['topics', 'sources', 'counts'])
+    actual_df, actual_src_df = gkg_process(test_df)
     for _, actual_row in actual_df.iterrows():
         assert expected_df[expected_df['topics'] == actual_row['topics']][df_cols].squeeze().equals(actual_row)
+    for _, actual_row in actual_src_df.iterrows():
+        pytest.set_trace()
+        assert expected_src_df[(expected_src_df['topics'] == actual_row['topics']) & (expected_src_df['sources'] == actual_row['sources'])].squeeze().equals(actual_row)

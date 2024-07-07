@@ -107,7 +107,7 @@ def merge_lists(lists):
         merged += l
     return merged
 
-def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
+def combine_df_topics(df: pd.DataFrame, src_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     url_list = df.urls.tolist()
     topic_list = df.topics.tolist()
     topic_graph = create_topic_graph(url_list, 0.75)
@@ -120,5 +120,8 @@ def combine_df_topics(df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
     }).reset_index()
     df['counts'] = df['sources'].apply(len)
     df['src_counts'] = df['urls'].apply(lambda x: len(set(x)))
-    return df
+
+    src_df['topics'] = src_df['topics'].apply(lambda x: topic_remap[x])
+    src_df['counts'] = src_df.groupby(['topics', 'sources']).size()
+    return df, src_df
 
