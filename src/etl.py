@@ -210,6 +210,7 @@ def gkg_process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     topic_df['counts'] = topic_df['urls'].apply(len)
     topic_df['src_counts'] = topic_df['sources'].apply(lambda x: len(set(x)))
     topic_df = topic_df[topic_df['topics'] != 'Associated Press']
+    src_df = src_df[src_df['topics'] != 'Associated Press']
     return topic_df, src_df
 
 def create_dfs(link: str) -> tuple[pd.DataFrame, pd.DataFrame]:
