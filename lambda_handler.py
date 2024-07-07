@@ -26,8 +26,9 @@ def lambda_handler(event, context):
     old_src_df = utils.df_from_bucket(S3_BUCKET, old_src_file)
 
     combine_df, combine_src_df = combine_topics.combine_df_topics(topic_df, src_df, old_df)
-    logger.warning(combine_df)
+    logger.warning(combine_df.columns)
     scores_updated = etl.update_scores(combine_df, combine_src_df, scores_df, srcs_df, S3_BUCKET, old_df, old_src_df)
+    logger.warning(combine_df.columns)
     success = etl.upload(combine_df, S3_BUCKET, curr_dt)
     if not (success and scores_updated):
         logger.error('Failed to write to S3.')
