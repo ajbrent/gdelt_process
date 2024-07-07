@@ -256,7 +256,7 @@ def score_func(row: pd.Series) -> float:
 
 def update_scores(
         new_data: pd.DataFrame,
-        new_srcs:pd.DataFrame,
+        new_srcs: pd.DataFrame,
         scores_df: pd.DataFrame,
         srcs_df: pd.DataFrame,
         bucket: str,
@@ -308,7 +308,7 @@ def update_scores(
 
     merge_df = merge_df[merge_df['day_counts'] > 0]
     merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
-    merge_df = merge_df.drop(columns=['sources', 'counts', 'src_counts'])
+    merge_df = merge_df.drop(columns=['urls', 'sources', 'counts', 'src_counts'])
     
     _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
     _ = client.put_object(Bucket=bucket, Key='day-srcs.parquet', Body=src_merge_df.to_parquet())
