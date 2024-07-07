@@ -272,10 +272,8 @@ def update_scores(
         merge_df.fillna(0, inplace=True)
     else:
         merge_df['day_counts'] = 0
-        merge_df['day_src_counts'] = 0
         merge_df['day_scores'] = 0
     merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
-    merge_df['day_src_counts'] = merge_df['day_src_counts'] + merge_df['src_counts']
     merge_df = merge_df.drop(columns=['counts', 'src_counts'])
 
     src_merge_df = new_srcs
@@ -302,6 +300,7 @@ def update_scores(
         src_merge_df['day_counts'] = src_merge_df['day_counts'] - src_merge_df['counts']
         src_merge_df.drop(columns=['counts'], inplace=True)
 
+    logger.warning(src_merge_df)
     src_merge_df.rename(columns={'day_counts': 'day_src_counts'}, inplace=True)
     src_merge_df = src_merge_df[src_merge_df['day_src_counts'] > 0]
     src_count_df = src_merge_df.groupby('topics').agg('size')
