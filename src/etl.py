@@ -303,6 +303,8 @@ def update_scores(
     src_merge_df = src_merge_df[src_merge_df['topic_src_counts'] > 0]
     src_count_df = src_merge_df.groupby('topics').agg('size').reset_index(name='topic_src_counts')
 
+    logger.warning(src_count_df['topics'])
+    logger.warning(merge_df['topics'])
     merge_df = pd.merge(merge_df, src_count_df, on='topics', how='outer')
     logger.warning(merge_df)
     merge_df.fillna(0, inplace=True)
