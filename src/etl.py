@@ -280,10 +280,10 @@ def update_scores(
     if srcs_df is not None:
         src_merge_df = pd.merge(srcs_df, new_srcs, on=['topics', 'sources'], how='outer')
         merge_df.fillna(0, inplace=True)
-        src_merge_df['day_src_counts'] = src_merge_df['day_src_counts'] + src_merge_df['counts']
+        src_merge_df['topic_src_counts'] = src_merge_df['topic_src_counts'] + src_merge_df['counts']
         src_merge_df.drop(columns=['counts'], inplace=True)
     else:
-        src_merge_df.rename(columns={'counts': 'day_src_counts'}, inplace=True)
+        src_merge_df.rename(columns={'counts': 'topic_src_counts'}, inplace=True)
 
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
@@ -297,17 +297,18 @@ def update_scores(
     if old_src_df is not None:
         src_merge_df = pd.merge(src_merge_df, old_src_df, on=['topics', 'sources'], how='outer')
         src_merge_df.fillna(0, inplace=True)
-        src_merge_df['day_src_counts'] = src_merge_df['day_src_counts'] - src_merge_df['counts']
+        src_merge_df['topic_src_counts'] = src_merge_df['topic_src_counts'] - src_merge_df['counts']
         src_merge_df.drop(columns=['counts'], inplace=True)
 
-    src_merge_df = src_merge_df[src_merge_df['day_src_counts'] > 0]
-    src_count_df = src_merge_df.groupby('topics').agg('size').reset_index(name='day_src_counts')
+    src_merge_df = src_merge_df[src_merge_df['topic_src_counts'] > 0]
+    src_count_df = src_merge_df.groupby('topics').agg('size').reset_index(name='topic_src_counts')
 
     merge_df = pd.merge(merge_df, src_count_df, on='topics', how='right')
 
     merge_df = merge_df[merge_df['day_counts'] > 0]
+    merge_df['day_src_counts'] = merge_df['topic_src_counts']
     merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
-    merge_df = merge_df.drop(columns=['urls', 'sources', 'counts', 'src_counts'])
+    merge_df = merge_df.drop(columns=['urls', 'sources', 'counts', 'src_counts', 'topic_src_counts'])
     
     _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
     _ = client.put_object(Bucket=bucket, Key='day-srcs.parquet', Body=src_merge_df.to_parquet())
