@@ -280,10 +280,10 @@ def update_scores(
     if srcs_df is not None:
         src_merge_df = pd.merge(srcs_df, new_srcs, on=['topics', 'sources'], how='outer')
         merge_df.fillna(0, inplace=True)
-        src_merge_df['day_counts'] = src_merge_df['day_counts'] + src_merge_df['counts']
+        src_merge_df['day_src_counts'] = src_merge_df['day_src_counts'] + src_merge_df['counts']
         src_merge_df.drop(['counts'], inplace=True)
     else:
-        src_merge_df.rename(columns={'counts': 'day_counts'}, inplace=True)
+        src_merge_df.rename(columns={'counts': 'day_src_counts'}, inplace=True)
 
     if old_df is not None:
         merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
@@ -297,10 +297,9 @@ def update_scores(
     if old_src_df is not None:
         src_merge_df = pd.merge(src_merge_df, old_src_df, on=['topics', 'sources'], how='outer')
         src_merge_df.fillna(0, inplace=True)
-        src_merge_df['day_counts'] = src_merge_df['day_counts'] - src_merge_df['counts']
+        src_merge_df['day_src_counts'] = src_merge_df['day_src_counts'] - src_merge_df['counts']
         src_merge_df.drop(columns=['counts'], inplace=True)
 
-    src_merge_df.rename(columns={'day_counts': 'day_src_counts'}, inplace=True)
     src_merge_df = src_merge_df[src_merge_df['day_src_counts'] > 0]
     src_count_df = src_merge_df.groupby('topics').agg('size').reset_index(name='day_src_counts')
 
