@@ -266,7 +266,7 @@ def update_scores(
     """Update scores in S3."""
     client = boto3.client('s3')
 
-    merge_df = new_data
+    merge_df = new_data.copy()
     if scores_df is not None:
         merge_df = pd.merge(scores_df, new_data, on='topics', how='outer')
         merge_df.fillna(0, inplace=True)
@@ -276,7 +276,7 @@ def update_scores(
     merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
     merge_df = merge_df.drop(columns=['counts', 'src_counts'])
 
-    src_merge_df = new_srcs
+    src_merge_df = new_srcs.copy()
     if srcs_df is not None:
         src_merge_df = pd.merge(srcs_df, new_srcs, on=['topics', 'sources'], how='outer')
         merge_df.fillna(0, inplace=True)
