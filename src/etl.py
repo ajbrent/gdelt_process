@@ -204,14 +204,13 @@ def gkg_process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                 topic_dict[topic] = [[src], [url]]
             src_set.add((topic, src))
             
-    topic_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topics', 'sources', 'urls'])
-    src_df = pd.DataFrame(list(src_set), columns=['topics', 'sources'])
-    src_df['counts'] = 1
-    topic_df['counts'] = topic_df['urls'].apply(len)
-    topic_df['src_counts'] = topic_df['sources'].apply(lambda x: len(set(x)))
-    topic_df = topic_df[topic_df['topics'] != 'Associated Press']
-    src_df = src_df[src_df['topics'] != 'Associated Press']
-    return topic_df, src_df
+    url_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topic', 'source', 'urls'])
+    topic_src_df = pd.DataFrame(list(src_set), columns=['topic', 'source'])
+    topic_src_df['count'] = 1
+    url_df['count'] = url_df['urls'].apply(len)
+    url_df = url_df[url_df['topic'] != 'Associated Press']
+    topic_src_df = topic_src_df[topic_src_df['topic'] != 'Associated Press']
+    return url_df, topic_src_df
 
 def create_dfs(link: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Download, create dataframe and return data for DynamoDB model."""
@@ -225,14 +224,13 @@ def create_dfs(link: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
         csv_file_name = z.namelist()[0]
         with z.open(csv_file_name) as f:
-            out_df = {}
             if '.gkg.' in link:
                 gkg_df = pd.read_csv(f, sep='\t', parse_dates=[1], date_format='%Y%m%d%H%M%S', dtype=GKG_DICT, names=GKG_HEADERS, encoding='latin-1')
-                out_df, src_df = gkg_process(gkg_df)
+                url_df, topic_src_df = gkg_process(gkg_df)
 
-    return out_df, src_df
+    return url_df, topic_src_df
 
-def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
+def to_s3(df: pd.DataFrame, bucket: str, name: str) -> bool:
     buffer = io.BytesIO()
     table = pa.Table.from_pandas(df)
     pq.write_table(table, buffer)
@@ -240,7 +238,7 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
     buffer.seek(0)
 
     client = boto3.client('s3')
-    file_name = dt + '-' + name + '.parquet'
+    file_name = name + '.parquet'
 
     try:
         _ = client.put_object(Bucket=bucket, Key=file_name, Body=buffer.getvalue())
@@ -250,75 +248,43 @@ def to_s3(df: pd.DataFrame, bucket: str, dt: str, name: str) -> bool:
         raise ValueError('The parameters you provided are incorrect: {}'.format(error))
     return True
 
-def score_func(row: pd.Series) -> float:
-    """Calculate geometric mean logged for topic."""
-    return np.log(row['counts']) + 2 * np.log(row['src_counts']) + 1
+def upload(topic_df: pd.DataFrame, bucket: str, name: str) -> bool:
+    """Upload dataframe to S3."""
+    df_put = to_s3(topic_df, bucket, name)
+    return df_put
 
 def update_scores(
-        new_data: pd.DataFrame,
-        new_srcs: pd.DataFrame,
-        scores_df: pd.DataFrame,
-        srcs_df: pd.DataFrame,
-        bucket: str,
-        old_df: pd.DataFrame,
-        old_src_df: pd.DataFrame
-    ) -> bool:
+        topic_src: pd.DataFrame,
+        k_topic_src: pd.DataFrame,
+        old_topic_src: pd.DataFrame,
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Update scores in S3."""
-    client = boto3.client('s3')
 
-    merge_df = new_data.copy()
-    if scores_df is not None:
-        merge_df = pd.merge(scores_df, new_data, on='topics', how='outer')
-        merge_df.fillna(0, inplace=True)
+    topic_src_merge = topic_src.copy()
+    if k_topic_src is not None:
+        topic_src_merge = pd.merge(k_topic_src, topic_src, on=['topic', 'source'], how='outer')
+        topic_src_merge.fillna(0, inplace=True)
+        topic_src_merge['topic_src_counts'] = topic_src_merge['topic_src_counts'] + topic_src_merge['count']
+        topic_src_merge.drop(columns=['count'], inplace=True)
     else:
-        merge_df['day_counts'] = 0
-        merge_df['day_scores'] = 0
-    merge_df['day_counts'] = merge_df['day_counts'] + merge_df['counts']
-    merge_df = merge_df.drop(columns=['counts', 'src_counts'])
+        topic_src_merge.rename(columns={'count': 'topic_src_counts'}, inplace=True)
 
-    src_merge_df = new_srcs.copy()
-    if srcs_df is not None:
-        src_merge_df = pd.merge(srcs_df, new_srcs, on=['topics', 'sources'], how='outer')
-        merge_df.fillna(0, inplace=True)
-        src_merge_df['topic_src_counts'] = src_merge_df['topic_src_counts'] + src_merge_df['counts']
-        src_merge_df.drop(columns=['counts'], inplace=True)
-    else:
-        src_merge_df.rename(columns={'counts': 'topic_src_counts'}, inplace=True)
+    if old_topic_src is not None:
+        topic_src_merge = pd.merge(topic_src_merge, old_topic_src, on=['topic', 'source'], how='outer')
+        topic_src_merge.fillna(0, inplace=True)
+        topic_src_merge['topic_src_counts'] = topic_src_merge['topic_src_counts'] - topic_src_merge['count']
+        topic_src_merge.drop(columns=['count'], inplace=True)
 
-    if old_df is not None:
-        merge_df = pd.merge(merge_df, old_df, on='topics', how='outer')
-        merge_df.fillna(0, inplace=True)
-        merge_df = merge_df.drop(columns=['urls'])
-    else:
-        merge_df['sources'] = [[] for _ in range(len(merge_df))]
-        merge_df['counts'] = 0
-        merge_df['src_counts'] = 0
+    topic_src_merge = topic_src_merge[topic_src_merge['topic_src_counts'] > 0]
+    k_scores = topic_src_merge.groupby('topic').agg(
+        src_count = ('topic_src_counts', 'size'),
+        count = ('topic_src_counts', 'sum')
+    ).reset_index()
 
-    if old_src_df is not None:
-        src_merge_df = pd.merge(src_merge_df, old_src_df, on=['topics', 'sources'], how='outer')
-        src_merge_df.fillna(0, inplace=True)
-        src_merge_df['topic_src_counts'] = src_merge_df['topic_src_counts'] - src_merge_df['counts']
-        src_merge_df.drop(columns=['counts'], inplace=True)
+    k_scores.fillna(0, inplace=True)
+    k_scores = k_scores[k_scores['count'] > 0]
+    k_scores['score'] = np.log(k_scores['count']) + 2 * np.log(k_scores['src_count']) + 1
+    return k_scores, topic_src_merge
 
-    src_merge_df = src_merge_df[src_merge_df['topic_src_counts'] > 0]
-    src_count_df = src_merge_df.groupby('topics').agg('size').reset_index(name='topic_src_counts')
 
-    logger.warning(src_count_df['topics'])
-    logger.warning(merge_df['topics'])
-    merge_df = pd.merge(merge_df, src_count_df, on='topics', how='outer')
-    logger.warning(merge_df)
-    merge_df.fillna(0, inplace=True)
 
-    merge_df = merge_df[merge_df['day_counts'] > 0]
-    merge_df['day_src_counts'] = merge_df['topic_src_counts']
-    merge_df['day_scores'] = np.log(merge_df['day_counts']) + 2 * np.log(merge_df['day_src_counts']) + 1
-    merge_df = merge_df.drop(columns=['urls', 'sources', 'counts', 'src_counts', 'topic_src_counts'])
-    
-    _ = client.put_object(Bucket=bucket, Key='day-scores.parquet', Body=merge_df.to_parquet())
-    _ = client.put_object(Bucket=bucket, Key='day-srcs.parquet', Body=src_merge_df.to_parquet())
-    return True
-
-def upload(topic_df: pd.DataFrame, bucket: str, dt: str) -> bool:
-    """Upload dataframe to S3."""
-    df_put = to_s3(topic_df, bucket, dt, 'scores')
-    return df_put

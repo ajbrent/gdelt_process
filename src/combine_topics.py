@@ -107,21 +107,21 @@ def merge_lists(lists):
         merged += l
     return merged
 
-def combine_df_topics(df: pd.DataFrame, src_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
-    url_list = df.urls.tolist()
-    topic_list = df.topics.tolist()
+def combine_df_topics(url_df: pd.DataFrame, topic_src_df: pd.DataFrame, k_topic_src_df: pd.DataFrame) -> pd.DataFrame:
+    url_list = url_df.urls.tolist()
+    topic_list = url_df.topic.tolist()
     topic_graph = create_topic_graph(url_list, 0.75)
-    old_set = set(old_df['topics'].tolist()) if old_df is not None else set()
+    old_set = set(k_topic_src_df['topic'].tolist()) if k_topic_src_df is not None else set()
     topic_remap = combine_topics(topic_list, topic_graph, old_set)
-    df['topics'] = df['topics'].apply(lambda x: topic_remap[x])
-    df = df.groupby('topics').agg({
+    url_df['topic'] = url_df['topic'].apply(lambda x: topic_remap[x])
+    url_df = url_df.groupby('topic').agg({
         'sources': merge_lists,
         'urls': merge_lists,
     }).reset_index()
-    df['counts'] = df['sources'].apply(len)
-    df['src_counts'] = df['urls'].apply(lambda x: len(set(x)))
+    url_df['count'] = url_df['sources'].apply(len)
+    url_df['src_count'] = url_df['urls'].apply(lambda x: len(set(x)))
 
-    src_df['topics'] = src_df['topics'].apply(lambda x: topic_remap[x])
-    src_df = src_df.groupby(['topics', 'sources']).agg('size').reset_index(name='counts')
-    return df, src_df
+    topic_src_df['topic'] = topic_src_df['topic'].apply(lambda x: topic_remap[x])
+    topic_src_df = topic_src_df.groupby(['topics', 'sources']).agg('size').reset_index(name='counts')
+    return url_df, topic_src_df
 
