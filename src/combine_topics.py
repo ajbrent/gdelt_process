@@ -118,10 +118,8 @@ def combine_df_topics(url_df: pd.DataFrame, topic_src_df: pd.DataFrame, k_topic_
         'sources': merge_lists,
         'urls': merge_lists,
     }).reset_index()
-    url_df['count'] = url_df['sources'].apply(len)
-    url_df['src_count'] = url_df['urls'].apply(lambda x: len(set(x)))
 
     topic_src_df['topic'] = topic_src_df['topic'].apply(lambda x: topic_remap[x])
-    topic_src_df = topic_src_df.groupby(['topics', 'sources']).agg('size').reset_index(name='counts')
+    topic_src_df = topic_src_df.groupby(['topics', 'sources']).agg('size').reset_index(name='count')
     return url_df, topic_src_df
 

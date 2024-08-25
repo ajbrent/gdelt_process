@@ -79,38 +79,32 @@ def test_gkg_process():
     ]
     test_df = pd.DataFrame(data, columns=GKG_HEADERS)
     # will probably neet to change as data needs are changed
-    df_cols = ['topic', 'source', 'urls', 'count']
+    url_df_cols = ['topic', 'sources', 'urls']
     
     expected_rows = [[
         'Robert Kavcic',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ], [
         'Hassan Pirnia',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ], [
         'Youtube',
         ['apnews.com'],
         ['http://apnews.com/fake/url/test'],
-        1,
     ], [
         'Test Name',
         ['reuters.com'],
         ['http://reuters.com/fake/url/test'],
-        1,
     ], [
         'Fifth-place Roma',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ], [
         'Romelu Lukaku',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ]]
 
     expected_src_rows = [
@@ -125,11 +119,11 @@ def test_gkg_process():
         ['Romelu Lukaku', 'apnews.com', 1],
         ['Romelu Lukaku', 'reuters.com', 1]
     ]
-    expected_df = pd.DataFrame(expected_rows, columns=df_cols)
+    expected_url_df = pd.DataFrame(expected_rows, columns=url_df_cols)
     expected_src_df = pd.DataFrame(expected_src_rows, columns=['topic', 'source', 'count'])
     actual_df, actual_src_df = gkg_process(test_df)
     for _, actual_row in actual_df.iterrows():
-        assert expected_df[expected_df['topic'] == actual_row['topic']][df_cols].squeeze().equals(actual_row)
+        assert expected_url_df[expected_url_df['topic'] == actual_row['topic']][url_df_cols].squeeze().equals(actual_row)
     for _, actual_row in actual_src_df.iterrows():
         assert expected_src_df[(expected_src_df['topic'] == actual_row['topic']) & (expected_src_df['source'] == actual_row['source'])].squeeze().equals(actual_row)
 
@@ -155,32 +149,26 @@ def new_urls():
         'Robert Kavcic',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ], [
         'Hassan Pirnia',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ], [
         'Youtube',
         ['apnews.com'],
         ['http://apnews.com/fake/url/test'],
-        1,
     ], [
         'Test Name',
         ['reuters.com'],
         ['http://reuters.com/fake/url/test'],
-        1,
     ], [
         'Fifth-place Roma',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ], [
         'Romelu Lukaku',
         ['apnews.com', 'reuters.com'],
         ['http://apnews.com/fake/url/test', 'http://reuters.com/fake/url/test'],
-        2,
     ]]
     return pd.DataFrame(new_data, columns=['topic', 'source', 'urls'])
 

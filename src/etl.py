@@ -204,10 +204,9 @@ def gkg_process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                 topic_dict[topic] = [[src], [url]]
             src_set.add((topic, src))
             
-    url_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topic', 'source', 'urls'])
+    url_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topic', 'sources', 'urls'])
     topic_src_df = pd.DataFrame(list(src_set), columns=['topic', 'source'])
     topic_src_df['count'] = 1
-    url_df['count'] = url_df['urls'].apply(len)
     url_df = url_df[url_df['topic'] != 'Associated Press']
     topic_src_df = topic_src_df[topic_src_df['topic'] != 'Associated Press']
     return url_df, topic_src_df
