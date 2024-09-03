@@ -261,6 +261,8 @@ def update_scores(
 
     topic_src_merge = topic_src.copy()
     if k_topic_src is not None:
+        if 'count' in k_topic_src.columns:
+            k_topic_src.rename(columns={'count': 'topic_src_counts'}, inplace=True)
         topic_src_merge = pd.merge(k_topic_src, topic_src, on=['topic', 'source'], how='outer')
         topic_src_merge.fillna(0, inplace=True)
         topic_src_merge['topic_src_counts'] = topic_src_merge['topic_src_counts'] + topic_src_merge['count']
@@ -269,15 +271,18 @@ def update_scores(
         topic_src_merge.rename(columns={'count': 'topic_src_counts'}, inplace=True)
 
     if old_topic_src is not None:
+        if 'count' in topic_src_merge.columns:
+            k_topic_src.rename(columns={'count': 'topic_src_counts'}, inplace=True)
         topic_src_merge = pd.merge(topic_src_merge, old_topic_src, on=['topic', 'source'], how='outer')
         topic_src_merge.fillna(0, inplace=True)
         topic_src_merge['topic_src_counts'] = topic_src_merge['topic_src_counts'] - topic_src_merge['count']
         topic_src_merge.drop(columns=['count'], inplace=True)
 
     topic_src_merge = topic_src_merge[topic_src_merge['topic_src_counts'] > 0]
+    topic_src_merge.rename(columns={'topic_src_counts': 'count'}, inplace=True)
     k_scores = topic_src_merge.groupby('topic').agg(
-        src_count = ('topic_src_counts', 'size'),
-        count = ('topic_src_counts', 'sum')
+        src_count = ('count', 'size'),
+        count = ('count', 'sum')
     ).reset_index()
 
     k_scores.fillna(0, inplace=True)

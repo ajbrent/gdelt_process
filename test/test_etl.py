@@ -287,7 +287,7 @@ def expected_src_df():
         ['Romelu Lukaku', 'apnews.com', 1],
         ['Romelu Lukaku', 'reuters.com', 1]
     ]
-    cols = ['topic', 'source', 'topic_src_counts']
+    cols = ['topic', 'source', 'count']
     return pd.DataFrame(srcs_rows, columns=cols)
 
 
