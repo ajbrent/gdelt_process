@@ -12,3 +12,4 @@ dependencies:
     - boto3
     - pyarrow
     - pandas
+    - duckdb

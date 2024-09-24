@@ -217,7 +217,7 @@ def topic_src_df():
         ['John Doe', 'news1.com', 1],
         ['John Doe', 'news2.com', 2],
     ]
-    cols = ['topic', 'source', 'topic_src_counts']
+    cols = ['topic', 'source', 'count']
     return pd.DataFrame(srcs_rows, columns=cols)
 
 @pytest.fixture
@@ -299,14 +299,13 @@ def test_update(
     expected_src_df: pd.DataFrame,
     expected_scores_df: pd.DataFrame
 ):
-    """update_scores has the intenden result."""
+    """update_scores has the intended result."""
     actual_scores_df, actual_src_df = update_scores(new_topic_srcs, topic_src_df, old_src_df)
     actual_src_df = actual_src_df.sort_values(by=list(actual_src_df.columns)).reset_index(drop=True)
     expected_src_df = expected_src_df.astype(actual_src_df.dtypes.to_dict())
     expected_src_df = expected_src_df.sort_values(by=list(expected_src_df.columns)).reset_index(drop=True)
 
     assert actual_src_df.equals(expected_src_df)
-
     actual_scores_df = actual_scores_df.sort_values(by=list(actual_scores_df.columns)).reset_index(drop=True)
     expected_scores_df = expected_scores_df.sort_values(by=list(expected_scores_df.columns)).reset_index(drop=True)
     expected_scores_df = expected_scores_df.astype(actual_scores_df.dtypes.to_dict())

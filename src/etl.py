@@ -10,7 +10,7 @@ import pandas as pd
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
-
+import duckdb
 import logging
 import boto3
 import botocore
@@ -261,31 +261,41 @@ def update_scores(
 
     topic_src_merge = topic_src.copy()
     if k_topic_src is not None:
-        if 'count' in k_topic_src.columns:
-            k_topic_src.rename(columns={'count': 'topic_src_counts'}, inplace=True)
-        topic_src_merge = pd.merge(k_topic_src, topic_src, on=['topic', 'source'], how='outer')
-        topic_src_merge.fillna(0, inplace=True)
-        topic_src_merge['topic_src_counts'] = topic_src_merge['topic_src_counts'] + topic_src_merge['count']
-        topic_src_merge.drop(columns=['count'], inplace=True)
+        topic_src_merge = duckdb.query('''
+            SELECT
+                COALESCE(topic_src.topic, k_topic_src.topic) AS topic,
+                COALESCE(topic_src.source, k_topic_src.source) AS source,
+                COALESCE(topic_src.count, 0) + COALESCE(k_topic_src.count, 0) AS topic_src_counts
+            FROM topic_src
+                FULL OUTER JOIN k_topic_src
+                ON topic_src.topic = k_topic_src.topic
+                AND topic_src.source = k_topic_src.source;
+        ''').to_df()
     else:
         topic_src_merge.rename(columns={'count': 'topic_src_counts'}, inplace=True)
 
     if old_topic_src is not None:
-        if 'count' in topic_src_merge.columns:
-            k_topic_src.rename(columns={'count': 'topic_src_counts'}, inplace=True)
-        topic_src_merge = pd.merge(topic_src_merge, old_topic_src, on=['topic', 'source'], how='outer')
-        topic_src_merge.fillna(0, inplace=True)
-        topic_src_merge['topic_src_counts'] = topic_src_merge['topic_src_counts'] - topic_src_merge['count']
-        topic_src_merge.drop(columns=['count'], inplace=True)
+        topic_src_merge = duckdb.query('''
+            SELECT
+                COALESCE(topic_src_merge.topic, old_topic_src.topic) AS topic,
+                COALESCE(topic_src_merge.source, old_topic_src.source) AS source,
+                COALESCE(topic_src_merge.topic_src_counts, 0) - COALESCE(old_topic_src.count, 0) AS topic_src_counts
+            FROM topic_src_merge
+                FULL OUTER JOIN old_topic_src
+                ON topic_src_merge.topic = old_topic_src.topic
+                AND topic_src_merge.source = old_topic_src.source;
+        ''').to_df()
 
     topic_src_merge = topic_src_merge[topic_src_merge['topic_src_counts'] > 0]
     topic_src_merge.rename(columns={'topic_src_counts': 'count'}, inplace=True)
-    k_scores = topic_src_merge.groupby('topic').agg(
-        src_count = ('count', 'size'),
-        count = ('count', 'sum')
-    ).reset_index()
-
-    k_scores.fillna(0, inplace=True)
+    k_scores = duckdb.query('''
+        SELECT
+            topic,
+            COUNT(*) AS src_count,
+            SUM(count) AS count
+        FROM topic_src_merge
+            GROUP BY topic;
+    ''').to_df()
     k_scores = k_scores[k_scores['count'] > 0]
     k_scores['score'] = np.log(k_scores['count']) + 2 * np.log(k_scores['src_count']) + 1
     return k_scores, topic_src_merge
