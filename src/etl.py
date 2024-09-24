@@ -258,8 +258,6 @@ def update_scores(
         old_topic_src: pd.DataFrame,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Update scores in S3."""
-
-    topic_src_merge = topic_src.copy()
     if k_topic_src is not None:
         topic_src_merge = duckdb.query('''
             SELECT
@@ -272,6 +270,7 @@ def update_scores(
                 AND topic_src.source = k_topic_src.source;
         ''').to_df()
     else:
+        topic_src_merge = topic_src
         topic_src_merge.rename(columns={'count': 'topic_src_counts'}, inplace=True)
 
     if old_topic_src is not None:
