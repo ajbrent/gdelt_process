@@ -1,0 +1,7 @@
+catalog:
+  default:
+    type: dynamodb
+    table-name: iceberg
+
+    
+    

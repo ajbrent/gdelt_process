@@ -5,15 +5,19 @@ import io
 import re
 import time
 import zipfile
+import duckdb
 
 import pandas as pd
-import numpy as np
+
+import pyarrow.csv as pv
 import pyarrow as pa
 import pyarrow.parquet as pq
-import duckdb
+import pyarrow.compute as pc
 import logging
 import boto3
 import botocore
+
+from pyiceberg import catalog
 
 logger = logging.getLogger()
 
@@ -21,7 +25,7 @@ TXT_LINK = 'http://data.gdeltproject.org/gdeltv2/lastupdate.txt'
 
 GKG_HEADERS = [
     'GKG_RECORD_ID',
-    'DATE',
+    'GKG_DATE',
     'V2SOURCECOLLECTIONIDENTIFIER',
     'V2SOURCECOMMONNAME',
     'V2DOCUMENTIDENTIFIER',
@@ -49,34 +53,273 @@ GKG_HEADERS = [
     'V2EXTRASXML'
 ]
 
-GKG_DICT = {
-    0: str, # GKGRECORDID
-    2: int, # V2SOURCECOLLECTIONIDENTIFIER
-    3: str, # V2SOURCECOMMONNAME
-    4: str, # V2DOCUMENTIDENTIFIER
-    5: str, # V1COUNTS
-    6: str, # V2.1COUNTS
-    7: str, # V1THEMES
-    8: str, # V2ENHANCEDTHEMES
-    9: str, # V1LOCATIONS
-    10: str, # V2ENHANCEDLOCATIONS
-    11: str, # V1PERSONS
-    12: str, # V2ENHANCEDPERSONS
-    13: str, # V1ORGANIZATIONS
-    14: str, # V2ENHANCEDORGANIZATIONS
-    15: str, # V1.5TONE
-    16: str, # V2.1ENHANCEDDATES
-    17: str, # V2GCAM
-    18: str, # V2.1SHARINGIMAGE
-    19: str, # V2.1RELATEDIMAGES
-    20: str, # V2.1SOCIALIMAGEEMBEDS
-    21: str, # V2.1SOCIALVIDEOEMBEDS
-    22: str, # V2.1QUOTATIONS
-    23: str, # V2.1ALLNAMES
-    24: str, # V2.1AMOUNTS
-    25: str, # V2.1TRANSLATIONINFO
-    26: str, # V2EXTRASXML
+TABLE_LIST = [
+    'articles',
+    'counts',
+    'themes',
+    'locations',
+    'persons',
+    'organizations',
+    'dates',
+    'gcam',
+    'related_images',
+    'social_image_embeds',
+    'social_video_embeds',
+    'quotations',
+    'all_names',
+    'amounts',
+    'translation_info'
+]
+
+USED_GKG_HEADERS = [
+    'GKG_RECORD_ID',
+    'GKG_DATE',
+    'V2SOURCECOLLECTIONIDENTIFIER',
+    'V2SOURCECOMMONNAME',
+    'V2DOCUMENTIDENTIFIER',
+    'V2.1COUNTS',
+    'V2ENHANCEDTHEMES',
+    'V2ENHANCEDLOCATIONS',
+    'V2ENHANCEDPERSONS',
+    'V2ENHANCEDORGANIZATIONS',
+    'V1.5TONE',
+    'V2.1ENHANCEDDATES',
+    'V2GCAM',
+    'V2.1SHARINGIMAGE',
+    'V2.1RELATEDIMAGES',
+    'V2.1SOCIALIMAGEEMBEDS',
+    'V2.1SOCIALVIDEOEMBEDS',
+    'V2.1QUOTATIONS',
+    'V2.1ALLNAMES',
+    'V2.1AMOUNTS',
+    'V2.1TRANSLATIONINFO',
+    'V2EXTRASXML'
+]
+
+BASE_COLS = {
+    'articles': [
+        ('GKG_RECORD_ID', 'record_id'),
+        ("GKG_DATE", 'collection_timestamp'),
+        ('V2SOURCECOLLECTIONIDENTIFIER', 'src_collection_identifier'),
+        ('V2SOURCECOMMONNAME', 'src_common_name'),
+        ('V2DOCUMENTIDENTIFIER', 'doc_identifier'),
+    ],
+    'counts': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'themes': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'locations': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'persons': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'organizations': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'dates': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'gcam': [
+        ('GKG_RECORD_ID', 'record_id'),
+        ('V2GCAM', 'gcam_str')
+    ],
+    'related_images': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'sharing_image': [
+        ('GKG_RECORD_ID', 'record_id'),
+        ('V2.1SHARINGIMAGE', 'url')
+    ],
+    'social_image_embeds': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'social_video_embeds': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'quotations': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'all_names': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'amounts': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'translation_info': [
+        ('GKG_RECORD_ID', 'record_id')
+    ],
+    'xml': [
+        ('GKG_RECORD_ID', 'record_id'),
+        ('V2EXTRASXML', 'xml')
+    ]
 }
+
+GKG_DICT = {
+    'GKGRECORDID': pa.string(), # GKGRECORDID
+    'GKG_DATE': pa.timestamp(unit='s'), # GKG_DATE
+    'V2SOURCECOLLECTIONIDENTIFIER': pa.uint16(), # V2SOURCECOLLECTIONIDENTIFIER
+    'V2SOURCECOMMONNAME': pa.string(), # V2SOURCECOMMONNAME
+    'V2DOCUMENTIDENTIFIER': pa.string(), # V2DOCUMENTIDENTIFIER
+    'V1COUNTS': pa.string(), # V1COUNTS
+    'V2.1COUNTS': pa.string(), # V2.1COUNTS
+    'V1THEMES': pa.string(), # V1THEMES
+    'V2ENHANCEDTHEMES': pa.string(), # V2ENHANCEDTHEMES
+    'V1LOCATIONS': pa.string(), # V1LOCATIONS
+    'V2ENHANCEDLOCATIONS': pa.string(), # V2ENHANCEDLOCATIONS
+    'V1PERSONS': pa.string(), # V1PERSONS
+    'V2ENHANCEDPERSONS': pa.string(), # V2ENHANCEDPERSONS
+    'V1ORGANIZATIONS': pa.string(), # V1ORGANIZATIONS
+    'V2ENHANCEDORGANIZATIONS': pa.string(), # V2ENHANCEDORGANIZATIONS
+    'V1.5TONE': pa.string(), # V1.5TONE
+    'V2.1ENHANCEDDATES': pa.string(), # V2.1ENHANCEDDATES
+    'V2GCAM': pa.string(), # V2GCAM
+    'V2.1SHARINGIMAGE': pa.string(), # V2.1SHARINGIMAGE
+    'V2.1RELATEDIMAGES': pa.string(), # V2.1RELATEDIMAGES
+    'V2.1SOCIALIMAGEEMBEDS': pa.string(), # V2.1SOCIALIMAGEEMBEDS
+    'V2.1SOCIALVIDEOEMBEDS': pa.string(), # V2.1SOCIALVIDEOEMBEDS
+    'V2.1QUOTATIONS': pa.string(), # V2.1QUOTATIONS
+    'V2.1ALLNAMES': pa.string(), # V2.1ALLNAMES
+    'V2.1AMOUNTS': pa.string(), # V2.1AMOUNTS
+    'V2.1TRANSLATIONINFO': pa.string(), # V2.1TRANSLATIONINFO
+    'V2EXTRASXML': pa.string(), # V2EXTRASXML
+}
+
+STR_REGEX_DICT = {
+    'counts': [{
+        'base_col': 'V2.1COUNTS',
+        'regexp': r"([^#;]+(?:#[^#;]+)*);?",
+        'cols': [
+            {'name': 'count_type', 'type': "STRING"},
+            {'name': 'count', 'type': "INT64"},
+            {'name': 'object_type', 'type': "STRING"},
+            {'name': 'location_type', 'type': "INT64"},
+            {'name': 'location_full_name', 'type': "STRING"},
+            {'name': 'location_country_code', 'type': "STRING"},
+            {'name': 'location_adm1_code', 'type': "STRING"},
+            {'name': 'location_latitude', 'type': "DOUBLE"},
+            {'name': 'location_longitude', 'type': "DOUBLE"},
+            {'name': 'location_feature_id', 'type': "STRING"},
+            {'name': 'char_offset', 'type': "INT64"}
+        ]
+    }],
+    'themes': [{
+        'base_col': 'V2ENHANCEDTHEMES',
+        'regexp': r'([^,;]+(?:,[^,;]+)*);?',
+        'cols': [
+            'gkg_theme',
+            'char_offset'
+        ]
+    }],
+    'locations': [{
+        'base_col': 'V2ENHANCEDLOCATIONS',
+        'regexp': r"([^#;]+(?:#[^#;]+)*);?",
+        'cols': [
+            'location_type',
+            'location_full_name',
+            'location_country_code',
+            'location_adm1_code',
+            'location_latitude',
+            'location_longitude',
+            'location_feature_id',
+        ]
+    }],
+    'persons': [{
+        'base_col': 'V2ENHANCEDPERSONS',
+        'regexp': r'([^,;]+(?:,[^,;]+)*);?',
+        'cols': [
+            'person_name',
+            'char_offset'
+        ]
+    }],
+    'organizations': [{
+        'base_col': 'V2ENHANCEDORGANIZATIONS',
+        'regexp': r'([^,;]+(?:,[^,;]+)*);?',
+        'cols': [
+            'organization_name',
+            'char_offset'
+        ]
+    }],
+    'articles': [{
+        'base_col': 'V1.5TONE',
+        'regexp': r'^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$',
+        'cols': [
+            {'name': 'tone', 'type': 'DOUBLE'},
+            {'name': 'positive_score', 'type': 'DOUBLE'},
+            {'name': 'negative_score', 'type': 'DOUBLE'},
+            {'name': 'polarity', 'type': 'DOUBLE'},
+            {'name': 'activity_reference_density', 'type': 'DOUBLE'},
+            {'name': 'self_group_reference_density', 'type': 'DOUBLE'},
+            {'name': 'word_count', 'type': 'INT64'},
+        ]
+    }],
+    'dates': [{
+        'base_col': 'V2.1ENHANCEDDATES',
+        'regexp': r'([^#;]+(?:#[^#;]+)*);?',
+        'cols': [
+            'date_resolution',
+            'month',
+            'day',
+            'year',
+            'char_offset'
+        ]
+    }],
+    'related_images': [{
+        'base_col': 'V2.1RELATEDIMAGES',
+        'regexp': r'[^;]+(?:;[^;]+)*',
+        'cols': [
+            'url'
+        ]
+    }],
+    'social_image_embeds': [{
+        'base_col': 'V2.1SOCIALIMAGEEMBEDS',
+        'regexp': r'[^;]+(?:;[^;]+)*',
+        'cols': [
+            'url'
+        ]
+    }],
+    'social_video_embeds': [{
+        'base_col': 'V2.1SOCIALVIDEOEMBEDS',
+        'regexp': r'[^;]+(?:;[^;]+)*',
+        'cols': [
+            'url'
+        ]
+    }],
+    'quotations': [{
+        'base_col': 'V2.1QUOTATIONS',
+        'regexp': r'[^#]+(?:\|[^#]+)*(?:#[^#]+(?:\|[^#]+)*)*',
+        'cols': [
+            'char_offset',
+            'length',
+            'verb',
+            'quote',
+        ]
+    }],
+    'all_names': [{
+        'base_col': 'V2.1ALLNAMES',
+        'regexp': r'([^,;]+(?:,[^,;]+)*);?',
+        'cols': [
+            'name',
+            'char_offset'
+        ]
+    }],
+    'amounts': [{
+        'base_col': 'V2.1AMOUNTS',
+        'regexp': r'([^,;]+(?:,[^,;]+)*);?',
+        'cols': [
+            'amount',
+            'object',
+            'char_offset'
+        ]
+    }]
+}
+
+FILTER_COLUMNS = [
+    'V1COUNTS',
+    'V1THEMES',
+]
 
 def check_links(link_dict: dict[str, str]) -> str:
     """Returns true if and only if all links are valid."""
@@ -158,60 +401,36 @@ def get_zip_links(t: int = 1, prev_stamp: int = None) -> tuple[int, dict[str, st
     logger.info(f'successfully retrieved data for {curr_stamp}')
     return curr_dt, link_dict
 
-def rm_subtopics(topics: list[str]) -> list[str]:
-    """Remove subtopics from the list of topics."""
-    # Could be a problem i.e. 'San Francisco' and 'Francisco' are two different topics
-    indexes = []
-    for i in range(len(topics)):
-        if i in indexes:
-            continue
-        for j in range(i+1, len(topics)):
-            if j in indexes:
-                continue
-            if topics[i] in topics[j]:
-                indexes.append(j)
-                break
-            if topics[j] in topics[i]:
-                indexes.append(i)
-    filtered_topics = [topics[i] for i in range(len(topics)) if i not in indexes]
-    return filtered_topics
+def csv_clean(tsv_stream):
+    content = tsv_stream.read().decode('latin-1')
+    processed_content = content.replace('"', '')
+    return io.BytesIO(processed_content.encode('latin-1'))
 
-def gkg_process(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Process the GKG file."""
-    # Looking only at web documents: code 1
-    df = df[df['V2SOURCECOLLECTIONIDENTIFIER'] == 1]
-    used_cols = ['GKG_RECORD_ID', 'DATE', 'V2SOURCECOMMONNAME', 'V2DOCUMENTIDENTIFIER', 'V2ENHANCEDORGANIZATIONS', 'V2ENHANCEDPERSONS', 'V2.1ALLNAMES']
-    df = df[used_cols]
-    pattern = r'([^,;]+),'
-    all_names = df['V2.1ALLNAMES'].astype(str).apply(lambda x: [] if x is None or x == '' else re.findall(pattern, x))
-    orgs = df['V2ENHANCEDORGANIZATIONS'].astype(str).apply(lambda x: [] if x is None or x == '' else re.findall(pattern, x))
-    persons = df['V2ENHANCEDPERSONS'].astype(str).apply(lambda x: [] if x is None or x == '' else re.findall(pattern, x))
-    df['TOPICS'] = all_names + orgs + persons
-    df['TOPICS'] = df['TOPICS'].apply(lambda x: list(set(x)))
-    df = df[['V2SOURCECOMMONNAME', 'V2DOCUMENTIDENTIFIER', 'TOPICS']]
-    df['TOPICS'] = df['TOPICS'].apply(rm_subtopics)
-    
-    topic_dict = {}
-    src_set = set()
-    for _, row in df.iterrows():
-        src = row['V2SOURCECOMMONNAME']
-        url = row['V2DOCUMENTIDENTIFIER']
-        for topic in row['TOPICS']:
-            if topic in topic_dict:
-                topic_dict[topic][0].append(src)
-                topic_dict[topic][1].append(url)
-            else:
-                topic_dict[topic] = [[src], [url]]
-            src_set.add((topic, src))
-            
-    url_df = pd.DataFrame([(k, *v) for k, v in topic_dict.items()], columns=['topic', 'sources', 'urls'])
-    topic_src_df = pd.DataFrame(list(src_set), columns=['topic', 'source'])
-    topic_src_df['count'] = 1
-    url_df = url_df[url_df['topic'] != 'Associated Press']
-    topic_src_df = topic_src_df[topic_src_df['topic'] != 'Associated Press']
-    return url_df, topic_src_df
+def tsv_to_table(tsv_file) -> pa.Table:
+    tsv_file = csv_clean(tsv_file)
+    parse_options = pv.ParseOptions(delimiter='\t')
+    read_options = pv.ReadOptions(encoding='latin1', column_names=GKG_HEADERS)
+    convert_options = pv.ConvertOptions(
+        column_types=GKG_DICT,
+        include_columns=USED_GKG_HEADERS,
+        include_missing_columns=True,
+        timestamp_parsers=['%Y%m%d%H%M%S'],
+        strings_can_be_null=True,
+        null_values=['']
+    )
+    gkg_table = pv.read_csv(tsv_file, read_options=read_options, parse_options=parse_options, convert_options=convert_options)
 
-def create_dfs(link: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # removing trailing commas from final column (V2EXTRASXML)
+    clean_xml = pa.compute.utf8_rtrim(gkg_table['V2EXTRASXML'], characters=',')
+    gkg_table = gkg_table.set_column(
+        gkg_table.column_names.index('V2EXTRASXML'), 
+        'V2EXTRASXML', 
+        clean_xml
+    )
+
+    return gkg_table
+
+def create_base_table(link: str) -> tuple[pa.Table, pa.Table]:
     """Download, create dataframe and return data for DynamoDB model."""
     zip_response = None
     try:
@@ -222,16 +441,58 @@ def create_dfs(link: str) -> tuple[pd.DataFrame, pd.DataFrame]:
         return None
     with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
         csv_file_name = z.namelist()[0]
-        with z.open(csv_file_name) as f:
+        with z.open(csv_file_name, 'rb') as f:
             if '.gkg.' in link:
-                gkg_df = pd.read_csv(f, sep='\t', parse_dates=[1], date_format='%Y%m%d%H%M%S', dtype=GKG_DICT, names=GKG_HEADERS, encoding='latin-1')
-                url_df, topic_src_df = gkg_process(gkg_df)
+                gkg_table = tsv_to_table(f)
+    return gkg_table
 
-    return url_df, topic_src_df
+def create_table(
+    gkg_table: pa.Table,
+    con: duckdb.DuckDBPyConnection, 
+    base_cols: dict,
+    regex_cols: list[dict] = None
+) -> pa.Table:
+    """Extract table from GKG table."""
+    query_str = """SELECT """
+    cast_query_str = """SELECT """
+    for item in base_cols:
+        base_col = item[0]
+        col_name = item[1]
+        query_str += f"{base_col} AS {col_name}, "
+        cast_query_str += f"{col_name}, "
+    if regex_cols is not None:
+        for item in regex_cols:
+            base_col = item["base_col"]
+            regexp = item["regexp"]
+            cols = item["cols"]
+            col_names = [f"'{col['name']}'" for col in cols]
+            cast_cols = [f"CAST({col['name']} AS {col['type']}) AS {col['name']}" for col in cols]
+            cast_query_str += ", ".join(cast_cols) + " "
+            params_str = "'" + regexp + "'" + ', ' + '[' + ', '.join(col_names) + ']'
+            query_str += f"""unnest(regexp_extract("{base_col}", {params_str})) """
+    else:
+        query_str = query_str.rstrip(", ")
+        cast_query_str = cast_query_str.rstrip(", ")
+    query_str += "FROM gkg_table;"
+    cast_query_str += "FROM pre_cast_table;"
+    pre_cast_table = con.execute(query_str).arrow()
+    table = con.execute(cast_query_str).arrow()  
 
-def to_s3(df: pd.DataFrame, bucket: str, name: str) -> bool:
+    return table
+
+def extract_tables(src_table: pa.Table) -> list[pa.Table]:
+    con = duckdb.connect()
+    table_dict = {}
+    for name in TABLE_LIST:
+        base_cols = BASE_COLS[name]
+        regex_cols = STR_REGEX_DICT[name]
+        table = create_table(src_table, con, regex_cols, base_cols)
+        table_dict[name] = table
+    return table_dict
+
+
+def to_s3(table: pa.Table, bucket: str, name: str, con) -> bool:
     buffer = io.BytesIO()
-    table = pa.Table.from_pandas(df)
     pq.write_table(table, buffer)
 
     buffer.seek(0)
@@ -248,56 +509,10 @@ def to_s3(df: pd.DataFrame, bucket: str, name: str) -> bool:
     return True
 
 def upload(topic_df: pd.DataFrame, bucket: str, name: str) -> bool:
-    """Upload dataframe to S3."""
+    """Upload table to S3."""
     df_put = to_s3(topic_df, bucket, name)
     return df_put
 
-def update_scores(
-        topic_src: pd.DataFrame,
-        k_topic_src: pd.DataFrame,
-        old_topic_src: pd.DataFrame,
-    ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Update scores in S3."""
-    if k_topic_src is not None:
-        topic_src_merge = duckdb.query('''
-            SELECT
-                COALESCE(topic_src.topic, k_topic_src.topic) AS topic,
-                COALESCE(topic_src.source, k_topic_src.source) AS source,
-                COALESCE(topic_src.count, 0) + COALESCE(k_topic_src.count, 0) AS topic_src_counts
-            FROM topic_src
-                FULL OUTER JOIN k_topic_src
-                ON topic_src.topic = k_topic_src.topic
-                AND topic_src.source = k_topic_src.source;
-        ''').to_df()
-    else:
-        topic_src_merge = topic_src
-        topic_src_merge.rename(columns={'count': 'topic_src_counts'}, inplace=True)
-
-    if old_topic_src is not None:
-        topic_src_merge = duckdb.query('''
-            SELECT
-                COALESCE(topic_src_merge.topic, old_topic_src.topic) AS topic,
-                COALESCE(topic_src_merge.source, old_topic_src.source) AS source,
-                COALESCE(topic_src_merge.topic_src_counts, 0) - COALESCE(old_topic_src.count, 0) AS topic_src_counts
-            FROM topic_src_merge
-                FULL OUTER JOIN old_topic_src
-                ON topic_src_merge.topic = old_topic_src.topic
-                AND topic_src_merge.source = old_topic_src.source;
-        ''').to_df()
-
-    topic_src_merge = topic_src_merge[topic_src_merge['topic_src_counts'] > 0]
-    topic_src_merge.rename(columns={'topic_src_counts': 'count'}, inplace=True)
-    k_scores = duckdb.query('''
-        SELECT
-            topic,
-            COUNT(*) AS src_count,
-            SUM(count) AS count
-        FROM topic_src_merge
-            GROUP BY topic;
-    ''').to_df()
-    k_scores = k_scores[k_scores['count'] > 0]
-    k_scores['score'] = np.log(k_scores['count']) + 2 * np.log(k_scores['src_count']) + 1
-    return k_scores, topic_src_merge
-
-
-
+def add_file(table: pa.Table):
+    catalog = catalog.load_catalog('default')
+    

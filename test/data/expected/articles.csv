@@ -1,0 +1,6 @@
+record_id,collection_timestamp,src_collection_identifier,src_common_name,doc_identifier,tone,positive_score,negative_score,polarity,activity_reference_density,self_group_reference_density,word_count
+20240430001500-0,20240430001500,1,cornwallseawaynews.com,https://www.cornwallseawaynews.com/ontario-news/majority-of-aspiring-homeowners-awaiting-rate-cuts-before-buying-bmo-survey/,-0.980392156862745,0.980392157,1.960784314,2.941176471,26.14379085,0,281
+20240430001500-1,20240430001500,1,thenewdawnliberia.com,https://thenewdawnliberia.com/the-battle-for-the-ballot-box/,-0.933125972006221,2.177293935,3.110419907,5.287713841,17.41835148,1.088646967,582
+20240430001500-2,20240430001500,1,playingfor90.com,https://playingfor90.com/posts/wasteful-napoli-draw-roma-01hwnyxktyp1,-2.4390243902439,3.189493433,5.628517824,8.818011257,23.63977486,0,502
+20240430001500-3,20240430001500,1,yahoo.com,https://www.yahoo.com/news/florida-deputies-arrest-potential-serial-235000428.html,-7.49464668094218,1.284796574,8.779443255,10.06423983,23.12633833,0.428265525,432
+20240430001500-4,20240430001500,1,kiiitv.com,https://www.kiiitv.com/article/news/local/ccfd-new-bike-team-for-buc-days-night-parade/503-da9e8b44-653b-42ba-b2a9-046f2856449f,-0.538599640933573,1.615798923,2.154398564,3.770197487,30.16157989,1.256732496,506

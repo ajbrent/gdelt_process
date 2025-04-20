@@ -1,0 +1,4 @@
+record_id,count_type,count,object_type,location_type,location_full_name,location_country_code,location_adm1_code,location_latitude,location_longitude,location_feature_id,char_offset
+20240430001500-0,AFFECT,12,Christian missionaries,1,Neverland,100,22,23.2245,-33.1125,featureid,109
+20240430001500-0,SEIZE,10001,bags,United States,21,88,1.11291,32.88314,featureid2,44
+20240430001500-3,KILL,2,,1,Puerto Rico,RQ,RQ,18.2359,-66.4838,RQ,909
